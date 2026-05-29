@@ -1,5 +1,6 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import Layout from './components/layout/Layout'
+import LoginPage from './pages/login'
 import SettingsPage from './pages/basicData/SettingsPage'
 import ManagerPage from './pages/basicData/ManagerPage'
 import ClientPage from './pages/basicData/ClientPage'
@@ -14,8 +15,8 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path='/' element={<Layout />}>
-          <Route index element={<Navigate to='/basic-data/settings' replace />} />
+        <Route path='/' element={<LoginPage />} />
+        <Route element={<Layout />}>
           <Route path='basic-data/settings' element={<SettingsPage />} />
           <Route path='basic-data/manager' element={<ManagerPage />} />
           <Route path='basic-data/client' element={<ClientPage />} />
