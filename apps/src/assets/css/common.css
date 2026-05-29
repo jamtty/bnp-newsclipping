@@ -1,0 +1,330 @@
+@charset "UTF-8";
+
+@font-face {
+  font-family: 'Pretendard';
+  font-weight: 900;
+  font-display: swap;
+  src:
+    local('Pretendard Black'),
+    url('../fonts/Pretendard/Pretendard-Black.woff2') format('woff2'),
+    url('../fonts/Pretendard/Pretendard-Black.woff') format('woff');
+}
+
+@font-face {
+  font-family: 'Pretendard';
+  font-weight: 800;
+  font-display: swap;
+  src:
+    local('Pretendard ExtraBold'),
+    url('../fonts/Pretendard/Pretendard-ExtraBold.woff2') format('woff2'),
+    url('../fonts/Pretendard/Pretendard-ExtraBold.woff') format('woff');
+}
+
+@font-face {
+  font-family: 'Pretendard';
+  font-weight: 700;
+  font-display: swap;
+  src:
+    local('Pretendard Bold'),
+    url('../fonts/Pretendard/Pretendard-Bold.woff2') format('woff2'),
+    url('../fonts/Pretendard/Pretendard-Bold.woff') format('woff');
+}
+
+@font-face {
+  font-family: 'Pretendard';
+  font-weight: 600;
+  font-display: swap;
+  src:
+    local('Pretendard SemiBold'),
+    url('../fonts/Pretendard/Pretendard-SemiBold.woff2') format('woff2'),
+    url('../fonts/Pretendard/Pretendard-SemiBold.woff') format('woff');
+}
+
+@font-face {
+  font-family: 'Pretendard';
+  font-weight: 500;
+  font-display: swap;
+  src:
+    local('Pretendard Medium'),
+    url('../fonts/Pretendard/Pretendard-Medium.woff2') format('woff2'),
+    url('../fonts/Pretendard/Pretendard-Medium.woff') format('woff');
+}
+
+@font-face {
+  font-family: 'Pretendard';
+  font-weight: 400;
+  font-display: swap;
+  src:
+    local('Pretendard Regular'),
+    url('../fonts/Pretendard/Pretendard-Regular.woff2') format('woff2'),
+    url('../fonts/Pretendard/Pretendard-Regular.woff') format('woff');
+}
+
+@font-face {
+  font-family: 'Pretendard';
+  font-weight: 300;
+  font-display: swap;
+  src:
+    local('Pretendard Light'),
+    url('../fonts/Pretendard/Pretendard-Light.woff2') format('woff2'),
+    url('../fonts/Pretendard/Pretendard-Light.woff') format('woff');
+}
+
+@font-face {
+  font-family: 'Pretendard';
+  font-weight: 200;
+  font-display: swap;
+  src:
+    local('Pretendard ExtraLight'),
+    url('../fonts/Pretendard/Pretendard-ExtraLight.woff2') format('woff2'),
+    url('../fonts/Pretendard/Pretendard-ExtraLight.woff') format('woff');
+}
+
+@font-face {
+  font-family: 'Pretendard';
+  font-weight: 100;
+  font-display: swap;
+  src:
+    local('Pretendard Thin'),
+    url('../fonts/Pretendard/Pretendard-Thin.woff2') format('woff2'),
+    url('../fonts/Pretendard/Pretendard-Thin.woff') format('woff');
+}
+
+/* 초기화 */
+html {
+  font-size: 10px;
+}
+html,
+body {
+  height: 100%;
+}
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Pretendard', dotum, sans-serif;
+}
+html,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+form,
+fieldset,
+img {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: 'Pretendard', dotum, sans-serif;
+}
+article,
+aside,
+details,
+figcaption,
+figure,
+footer,
+header,
+hgroup,
+menu,
+nav,
+section {
+  display: block;
+}
+
+ul,
+dl,
+dt,
+dd {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+legend {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  font-size: 0;
+  line-height: 0;
+  text-indent: -9999em;
+  overflow: hidden;
+}
+label,
+input,
+button,
+select,
+img {
+  vertical-align: middle;
+}
+input,
+button {
+  margin: 0;
+  padding: 0;
+  font-family: 'Pretendard', dotum, sans-serif;
+}
+input[type='submit'] {
+  cursor: pointer;
+}
+button {
+  cursor: pointer;
+  border: 0;
+  background-color: transparent;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+td {
+  padding: 0;
+}
+
+textarea,
+select {
+  font-family: 'Pretendard', dotum, sans-serif;
+}
+textarea {
+  resize: none;
+}
+select {
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url('../images/ico_select.svg');
+  background-repeat: no-repeat;
+  background-position: right 2rem center;
+  background-size: 1rem;
+}
+p {
+  margin: 0;
+  padding: 0;
+  word-break: break-all;
+}
+hr {
+  display: none;
+}
+pre {
+  overflow-x: scroll;
+}
+a {
+  color: #000;
+  text-decoration: none;
+}
+
+table caption {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+}
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+.sr_only,
+.skip_nav {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+}
+
+input,
+select,
+textarea {
+  border: 0;
+  outline: none;
+}
+
+input[readonly] {
+  background-color: #eee;
+  padding: 0 15px;
+  color: #555;
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled,
+button:disabled {
+  background-color: #D8D8D8;
+  cursor: not-allowed;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  font-family: "Pretendard", sans-serif;
+}
+
+:root {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  cursor: default;
+  line-height: 1.5;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  tab-size: 4;
+}
+html,
+body {
+  height: 100%;
+}
+img,
+picture,
+video,
+canvas,
+svg {
+  display: block;
+  max-width: 100%;
+}
+button {
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+a {
+  text-decoration: none;
+}
+table {
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+ol,
+ul,
+dl,
+dt,
+dd {
+  list-style: none;
+}
+
+
