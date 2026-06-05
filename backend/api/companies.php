@@ -37,12 +37,11 @@ require_once dirname(__DIR__) . '/config.php';
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     try {
         $stmt = $pdo->query("
-            SELECT `id`, `company_id`, `user_id`, `company_name`,
-                   `main_contact`, `main_manager`, `mobile`, `manager_email`,
-                   `created_at`
+            SELECT `company_id`, `user_id`, `company_name`,
+                   `main_contact`, `main_manager`, `mobile`, `manager_email`
             FROM `users`
             WHERE `user_type` = 'admin'
-            ORDER BY `created_at` DESC
+            ORDER BY `company_id` ASC
         ");
         $rows = $stmt->fetchAll();
         echo json_encode(['success' => true, 'data' => $rows]);
@@ -80,7 +79,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
         // 중복 확인
-        $check = $pdo->prepare("SELECT id FROM `users` WHERE `company_id` = ? LIMIT 1");
+        $check = $pdo->prepare("SELECT `company_id` FROM `users` WHERE `company_id` = ? LIMIT 1");
         $check->execute([$company_id]);
         if ($check->fetch()) {
             http_response_code(409);
@@ -112,7 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
     $body = json_decode(file_get_contents('php://input'), true);
 
-    $id            = intval($body['id']            ?? 0);
+    $target_id     = trim($body['company_id']    ?? '');
     $company_name  = trim($body['company_name']  ?? '');
     $main_contact  = trim($body['main_contact']  ?? '');
     $main_manager  = trim($body['main_manager']  ?? '');
@@ -120,9 +119,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
     $manager_email = trim($body['manager_email'] ?? '');
     $new_password  = trim($body['new_password']  ?? '');
 
-    if ($id === 0 || $company_name === '') {
+    if ($target_id === '' || $company_name === '') {
         http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'id와 상호는 필수입니다']);
+        echo json_encode(['success' => false, 'message' => 'company_id와 상호는 필수입니다']);
         exit;
     }
 
@@ -138,17 +137,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
                 UPDATE `users`
                 SET `company_name`=?, `main_contact`=?, `main_manager`=?,
                     `mobile`=?, `manager_email`=?, `password`=?
-                WHERE `id`=? AND `user_type`='admin'
+                WHERE `company_id`=? AND `user_type`='admin'
             ");
-            $stmt->execute([$company_name, $main_contact, $main_manager, $mobile, $manager_email, $hash, $id]);
+            $stmt->execute([$company_name, $main_contact, $main_manager, $mobile, $manager_email, $hash, $target_id]);
         } else {
             $stmt = $pdo->prepare("
                 UPDATE `users`
                 SET `company_name`=?, `main_contact`=?, `main_manager`=?,
                     `mobile`=?, `manager_email`=?
-                WHERE `id`=? AND `user_type`='admin'
+                WHERE `company_id`=? AND `user_type`='admin'
             ");
-            $stmt->execute([$company_name, $main_contact, $main_manager, $mobile, $manager_email, $id]);
+            $stmt->execute([$company_name, $main_contact, $main_manager, $mobile, $manager_email, $target_id]);
         }
 
         echo json_encode(['success' => true, 'message' => '수정되었습니다']);
@@ -161,19 +160,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
 
 // ── DELETE: 업체 삭제 ──────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
-    $id = intval($_GET['id'] ?? 0);
-    if ($id === 0) {
+    $del_id = trim($_GET['id'] ?? '');
+    if ($del_id === '') {
         http_response_code(400);
         echo json_encode(['success' => false, 'message' => 'id가 필요합니다']);
         exit;
     }
     try {
-        $stmt = $pdo->prepare("DELETE FROM `users` WHERE `id`=? AND `user_type`='admin'");
-        $stmt->execute([$id]);
-        echo json_encode(['success' => true, 'message' => '삭제되었습니다']);
+        $pdo->beginTransaction();
+
+        // 1) 뉴스 클리핑 관련 테이블 (있을 경우 대비)
+        foreach (['news_clippings', 'news', 'reports'] as $tbl) {
+            try {
+                $pdo->prepare("DELETE FROM `{$tbl}` WHERE `company_id`=?")->execute([$del_id]);
+            } catch (Exception $e) { /* 테이블 없으면 무시 */ }
+        }
+
+        // 2) 기자 (media_journalists)
+        $pdo->prepare("DELETE mj FROM `media_journalists` mj
+                       INNER JOIN `media` m ON mj.media_code = m.media_code AND m.company_id = ?
+                       WHERE m.company_id = ?")->execute([$del_id, $del_id]);
+
+        // 3) 매체
+        $pdo->prepare("DELETE FROM `media` WHERE `company_id`=?")->execute([$del_id]);
+
+        // 4) 클라이언트
+        $pdo->prepare("DELETE FROM `clients` WHERE `company_id`=?")->execute([$del_id]);
+
+        // 5) 담당자
+        $pdo->prepare("DELETE FROM `managers` WHERE `company_id`=?")->execute([$del_id]);
+
+        // 6) 업체 계정 (users)
+        $pdo->prepare("DELETE FROM `users` WHERE `company_id`=? AND `user_type`='admin'")->execute([$del_id]);
+
+        $pdo->commit();
+        echo json_encode(['success' => true, 'message' => '업체 및 관련 데이터가 모두 삭제되었습니다']);
     } catch (Exception $e) {
+        $pdo->rollBack();
         http_response_code(500);
-        echo json_encode(['success' => false, 'message' => '서버 오류']);
+        echo json_encode(['success' => false, 'message' => '삭제 중 오류가 발생했습니다: ' . $e->getMessage()]);
     }
     exit;
 }
