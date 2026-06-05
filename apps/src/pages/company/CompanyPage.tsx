@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 interface CompanyRow {
-  id: number
   company_id: string
   user_id: string
   company_name: string
@@ -32,12 +31,12 @@ function CompanyPage() {
   const pagedData  = data.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
 
   const handleEdit = (row: CompanyRow) => {
-    navigate('/company/edit', { state: { id: row.id } })
+    navigate('/company/edit', { state: { company_id: row.company_id } })
   }
 
-  const handleDelete = async (id: number, company_name: string) => {
+  const handleDelete = async (company_id: string, company_name: string) => {
     if (!window.confirm(`"${company_name}" 업체를 삭제하시겠습니까?\n해당 업체의 모든 데이터가 삭제될 수 있습니다.`)) return
-    const res  = await fetch(`/api/companies.php?id=${id}`, { method: 'DELETE' })
+    const res  = await fetch(`/api/companies.php?id=${company_id}`, { method: 'DELETE' })
     const json = await res.json()
     if (json.success) fetchList()
     else alert(json.message || '삭제에 실패했습니다')
@@ -85,7 +84,7 @@ function CompanyPage() {
                 </td>
               </tr>
             ) : pagedData.map((row, idx) => (
-              <tr key={row.id}>
+              <tr key={row.company_id}>
                 <td>{(currentPage - 1) * PAGE_SIZE + idx + 1}</td>
                 <td>{row.company_id}</td>
                 <td>{row.company_name}</td>
@@ -101,7 +100,7 @@ function CompanyPage() {
                         <path d='M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' />
                       </svg>
                     </button>
-                    <button className='btn-icon' title='삭제' onClick={() => handleDelete(row.id, row.company_name)}>
+                    <button className='btn-icon' title='삭제' onClick={() => handleDelete(row.company_id, row.company_name)}>
                       <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'>
                         <polyline points='3 6 5 6 21 6' />
                         <path d='M19 6l-1 14H6L5 6' />
