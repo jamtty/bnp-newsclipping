@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Layout from './components/layout/Layout'
 import LoginPage from './pages/login'
 import SettingsPage from './pages/basicData/SettingsPage'
@@ -15,12 +15,18 @@ import CompanyPage from './pages/company/CompanyPage'
 import CompanyAddPage from './pages/company/CompanyAddPage'
 import './assets/css/style.css'
 
+function RequireAuth({ children }: { children: React.ReactNode }) {
+  const user = sessionStorage.getItem('user')
+  if (!user) return <Navigate to='/' replace />
+  return <>{children}</>
+}
+
 function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path='/' element={<LoginPage />} />
-        <Route element={<Layout />}>
+        <Route element={<RequireAuth><Layout /></RequireAuth>}>
           <Route path='company' element={<CompanyPage />} />
           <Route path='company/new' element={<CompanyAddPage />} />
           <Route path='company/edit' element={<CompanyAddPage />} />

@@ -37,17 +37,18 @@ require_once dirname(__DIR__) . '/config.php';
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     try {
         $stmt = $pdo->query("
-            SELECT `company_id`, `user_id`, `company_name`,
-                   `main_contact`, `main_manager`, `mobile`, `manager_email`
+            SELECT `id`, `company_id`, `user_id`, `company_name`,
+                   `main_contact`, `main_manager`, `mobile`, `manager_email`,
+                   `created_at`
             FROM `users`
             WHERE `user_type` = 'admin'
-            ORDER BY `company_id` ASC
+            ORDER BY `created_at` DESC
         ");
         $rows = $stmt->fetchAll();
         echo json_encode(['success' => true, 'data' => $rows]);
     } catch (Exception $e) {
         http_response_code(500);
-        echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+        echo json_encode(['success' => false, 'message' => '서버 오류']);
     }
     exit;
 }
@@ -79,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
         // 중복 확인
-        $check = $pdo->prepare("SELECT `company_id` FROM `users` WHERE `company_id` = ? LIMIT 1");
+        $check = $pdo->prepare("SELECT id FROM `users` WHERE `company_id` = ? LIMIT 1");
         $check->execute([$company_id]);
         if ($check->fetch()) {
             http_response_code(409);
@@ -111,17 +112,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
     $body = json_decode(file_get_contents('php://input'), true);
 
-    $target_company_id = trim($body['company_id']    ?? '');
-    $company_name      = trim($body['company_name']  ?? '');
-    $main_contact      = trim($body['main_contact']  ?? '');
-    $main_manager      = trim($body['main_manager']  ?? '');
-    $mobile            = trim($body['mobile']        ?? '');
-    $manager_email     = trim($body['manager_email'] ?? '');
-    $new_password      = trim($body['new_password']  ?? '');
+    $id            = intval($body['id']            ?? 0);
+    $company_name  = trim($body['company_name']  ?? '');
+    $main_contact  = trim($body['main_contact']  ?? '');
+    $main_manager  = trim($body['main_manager']  ?? '');
+    $mobile        = trim($body['mobile']        ?? '');
+    $manager_email = trim($body['manager_email'] ?? '');
+    $new_password  = trim($body['new_password']  ?? '');
 
-    if ($target_company_id === '' || $company_name === '') {
+    if ($id === 0 || $company_name === '') {
         http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'company_id와 상호는 필수입니다']);
+        echo json_encode(['success' => false, 'message' => 'id와 상호는 필수입니다']);
         exit;
     }
 
@@ -137,17 +138,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
                 UPDATE `users`
                 SET `company_name`=?, `main_contact`=?, `main_manager`=?,
                     `mobile`=?, `manager_email`=?, `password`=?
-                WHERE `company_id`=? AND `user_type`='admin'
+                WHERE `id`=? AND `user_type`='admin'
             ");
-            $stmt->execute([$company_name, $main_contact, $main_manager, $mobile, $manager_email, $hash, $target_company_id]);
+            $stmt->execute([$company_name, $main_contact, $main_manager, $mobile, $manager_email, $hash, $id]);
         } else {
             $stmt = $pdo->prepare("
                 UPDATE `users`
                 SET `company_name`=?, `main_contact`=?, `main_manager`=?,
                     `mobile`=?, `manager_email`=?
-                WHERE `company_id`=? AND `user_type`='admin'
+                WHERE `id`=? AND `user_type`='admin'
             ");
-            $stmt->execute([$company_name, $main_contact, $main_manager, $mobile, $manager_email, $target_company_id]);
+            $stmt->execute([$company_name, $main_contact, $main_manager, $mobile, $manager_email, $id]);
         }
 
         echo json_encode(['success' => true, 'message' => '수정되었습니다']);
@@ -160,15 +161,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
 
 // ── DELETE: 업체 삭제 ──────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
-    $del_company_id = trim($_GET['id'] ?? '');
-    if ($del_company_id === '') {
+    $id = intval($_GET['id'] ?? 0);
+    if ($id === 0) {
         http_response_code(400);
         echo json_encode(['success' => false, 'message' => 'id가 필요합니다']);
         exit;
     }
     try {
-        $stmt = $pdo->prepare("DELETE FROM `users` WHERE `company_id`=? AND `user_type`='admin'");
-        $stmt->execute([$del_company_id]);
+        $stmt = $pdo->prepare("DELETE FROM `users` WHERE `id`=? AND `user_type`='admin'");
+        $stmt->execute([$id]);
         echo json_encode(['success' => true, 'message' => '삭제되었습니다']);
     } catch (Exception $e) {
         http_response_code(500);

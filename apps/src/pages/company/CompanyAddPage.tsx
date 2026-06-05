@@ -16,7 +16,7 @@ interface FormState {
 function CompanyAddPage() {
   const navigate  = useNavigate()
   const location  = useLocation()
-  const editId    = (location.state as any)?.company_id ?? null
+  const editId    = (location.state as any)?.id ?? null
   const isEdit    = editId !== null
 
   const [form, setForm] = useState<FormState>({
@@ -40,7 +40,7 @@ function CompanyAddPage() {
       .then(r => r.json())
       .then(res => {
         if (res.success) {
-          const row = res.data.find((d: any) => d.company_id === editId)
+          const row = res.data.find((d: any) => d.id === editId)
           if (row) {
             setForm({
               company_id:    row.company_id,
@@ -96,7 +96,7 @@ function CompanyAddPage() {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            company_id:    editId,
+            id:            editId,
             company_name:  form.company_name,
             main_contact:  form.main_contact,
             main_manager:  form.main_manager,
