@@ -11,6 +11,8 @@ import NewsRegistrationPage from './pages/newsRegistration'
 import NewsAddPage from './pages/newsRegistration/NewsAddPage'
 import ReportPage from './pages/report'
 import MyPage from './pages/myPage'
+import CompanyPage from './pages/company/CompanyPage'
+import CompanyAddPage from './pages/company/CompanyAddPage'
 import './assets/css/style.css'
 
 function App() {
@@ -19,6 +21,9 @@ function App() {
       <Routes>
         <Route path='/' element={<LoginPage />} />
         <Route element={<Layout />}>
+          <Route path='company' element={<CompanyPage />} />
+          <Route path='company/new' element={<CompanyAddPage />} />
+          <Route path='company/edit' element={<CompanyAddPage />} />
           <Route path='basic-data/settings' element={<SettingsPage />} />
           <Route path='basic-data/manager' element={<ManagerPage />} />
           <Route path='basic-data/client' element={<ClientPage />} />
