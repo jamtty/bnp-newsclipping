@@ -3,9 +3,8 @@ node_modules/
 apps/dist/
 apps/.vite/
 
-# phpMyAdmin vendor (대용량)
-phpMyAdmin/vendor/
-phpMyAdmin/tmp/
+# phpMyAdmin 전체 제외
+phpMyAdmin/
 
 # 환경설정 / 민감정보
 *.env
