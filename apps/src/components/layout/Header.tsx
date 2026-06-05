@@ -1,7 +1,20 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 function Header() {
   const [dropdownOpen, setDropdownOpen] = useState(false)
+  const navigate = useNavigate()
+
+  const user = JSON.parse(sessionStorage.getItem('user') || '{}')
+  const roleLabel = user.user_type === 'super_admin' ? '메인관리자' : '관리자'
+  const displayName = user.company_name
+    ? `${user.company_name} (${roleLabel})`
+    : roleLabel
+
+  const handleLogout = () => {
+    sessionStorage.removeItem('user')
+    navigate('/')
+  }
 
   return (
     <header className='layout-header'>
@@ -14,14 +27,14 @@ function Header() {
           <circle cx='12' cy='8' r='4' />
           <path d='M4 20c0-4 3.6-7 8-7s8 3 8 7' />
         </svg>
-        <span>조병철 (관리자)님</span>
+        <span>{displayName}님</span>
         <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'>
           <path d='M6 9l6 6 6-6' />
         </svg>
         {dropdownOpen && (
           <div className='header-dropdown'>
-            <a href='#'>마이페이지</a>
-            <a href='#'>로그아웃</a>
+            <a onClick={() => { setDropdownOpen(false); navigate('/my-page') }} style={{ cursor: 'pointer' }}>마이페이지</a>
+            <a onClick={handleLogout} style={{ cursor: 'pointer' }}>로그아웃</a>
           </div>
         )}
       </div>

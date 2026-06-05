@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import Modal from '../../components/common/Modal'
 
@@ -8,51 +8,61 @@ interface CategoryItem {
 }
 
 function ClientAddPage() {
-  const navigate = useNavigate()
-  const location = useLocation()
-  const editData = location.state as { no: string; company: string; bizNo: string; ceo: string; manager: string; phone: string; email: string } | null
+  const navigate  = useNavigate()
+  const location  = useLocation()
+  const editId    = (location.state as { id?: number } | null)?.id ?? null
+  const user      = JSON.parse(sessionStorage.getItem('user') || '{}')
 
   const [form, setForm] = useState({
-    companyCode: editData?.no ?? '0001',
-    companyName: editData?.company ?? '',
-    tel: editData?.phone ?? '',
-    repManager: editData?.manager ?? '',
-    managerName: '',
-    managerTel: '',
-    managerEmail: editData?.email ?? '',
-    ceo: editData?.ceo ?? '',
-    address: '',
-    memo: '',
+    client_code:   '',
+    company_name:  '',
+    biz_no:        '',
+    tel:           '',
+    manager_name:  '',
+    manager_tel:   '',
+    manager_email: '',
+    ceo:           '',
+    address:       '',
+    memo:          '',
   })
-
+  const [categories, setCategories]           = useState<CategoryItem[]>([])
   const [showCategoryModal, setShowCategoryModal] = useState(false)
   const [editingCategory, setEditingCategory] = useState<CategoryItem | null>(null)
   const [newCategoryName, setNewCategoryName] = useState('')
+  const [saving, setSaving]   = useState(false)
+  const [error, setError]     = useState('')
 
-  const [categories, setCategories] = useState<CategoryItem[]>([
-    { id: 1, name: '오뚜기 행사' },
-    { id: 2, name: '오뚜기 행사' },
-    { id: 3, name: '오뚜기 행사' },
-    { id: 4, name: '오뚜기 행사' },
-    { id: 5, name: '오뚜기 행사' },
-    { id: 6, name: '오뚜기 행사' },
-  ])
+  // 수정 모드 – 기존 데이터 로드
+  useEffect(() => {
+    if (!editId) return
+    fetch(`/api/clients.php?company_id=${encodeURIComponent(user.company_id)}&id=${editId}`)
+      .then(r => r.json())
+      .then(res => {
+        if (res.success) {
+          const d = res.data
+          setForm({
+            client_code:   d.client_code   ?? '',
+            company_name:  d.company_name  ?? '',
+            biz_no:        d.biz_no        ?? '',
+            tel:           d.tel           ?? '',
+            manager_name:  d.manager_name  ?? '',
+            manager_tel:   d.manager_tel   ?? '',
+            manager_email: d.manager_email ?? '',
+            ceo:           d.ceo           ?? '',
+            address:       d.address       ?? '',
+            memo:          d.memo          ?? '',
+          })
+          setCategories((d.categories ?? []).map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })))
+        }
+      })
+  }, [editId])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setForm(prev => ({ ...prev, [e.target.name]: e.target.value }))
   }
 
-  const handleAddCategory = () => {
-    setEditingCategory(null)
-    setNewCategoryName('')
-    setShowCategoryModal(true)
-  }
-
-  const handleEditCategory = (item: CategoryItem) => {
-    setEditingCategory(item)
-    setNewCategoryName(item.name)
-    setShowCategoryModal(true)
-  }
+  const handleAddCategory = () => { setEditingCategory(null); setNewCategoryName(''); setShowCategoryModal(true) }
+  const handleEditCategory = (item: CategoryItem) => { setEditingCategory(item); setNewCategoryName(item.name); setShowCategoryModal(true) }
 
   const handleSaveCategory = () => {
     if (!newCategoryName.trim()) return
@@ -62,13 +72,40 @@ function ClientAddPage() {
       setCategories(prev => [...prev, { id: Date.now(), name: newCategoryName.trim() }])
     }
     setShowCategoryModal(false)
-    setNewCategoryName('')
-    setEditingCategory(null)
   }
 
   const handleDeleteCategory = (id: number) => {
     if (!window.confirm('삭제하시겠습니까?')) return
     setCategories(prev => prev.filter(c => c.id !== id))
+  }
+
+  const handleSave = async () => {
+    if (!form.company_name.trim()) { setError('업체명을 입력하세요'); return }
+    if (!form.biz_no.trim())       { setError('사업자번호를 입력하세요'); return }
+    if (!form.tel.trim())          { setError('대표연락처를 입력하세요'); return }
+    if (!form.manager_name.trim()) { setError('담당자 이름을 입력하세요'); return }
+    if (!form.ceo.trim())          { setError('대표자명을 입력하세요'); return }
+    setSaving(true); setError('')
+    try {
+      const body = {
+        company_id: user.company_id,
+        ...form,
+        categories: categories.map(c => ({ name: c.name })),
+        ...(editId ? { id: editId } : {}),
+      }
+      const res  = await fetch('/api/clients.php', {
+        method: editId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (data.success) navigate('/basic-data/client')
+      else setError(data.message || '저장 실패')
+    } catch {
+      setError('서버에 연결할 수 없습니다')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -87,14 +124,17 @@ function ClientAddPage() {
           <span className='breadcrumb-sep'>›</span>
           <span className='breadcrumb-item' onClick={() => navigate('/basic-data/client')} style={{ cursor: 'pointer' }}>클라이언트 관리</span>
           <span className='breadcrumb-sep'>›</span>
-          <span className='breadcrumb-item active'>{editData ? '수정' : '신규등록'}</span>
+          <span className='breadcrumb-item active'>{editId ? '수정' : '신규등록'}</span>
         </nav>
       </div>
 
       <div className='page-toolbar'>
         <button className='btn-secondary' type='button' onClick={() => navigate('/basic-data/client')}>목록</button>
-        <button className='btn-primary' type='button'>저장</button>
+        <button className='btn-primary' type='button' onClick={handleSave} disabled={saving}>
+          {saving ? '저장 중...' : '저장'}
+        </button>
       </div>
+      {error && <p style={{ textAlign: 'right', color: '#e53e3e', fontSize: '1.3rem', margin: '0.4rem 0 0' }}>{error}</p>}
 
       <div className='content-card'>
         <div className='client-form'>
@@ -103,56 +143,57 @@ function ClientAddPage() {
           <div className='cf-row cf-row-2col'>
             <div className='cf-field'>
               <label className='cf-label'>업체코드 *</label>
-              <input className='cf-input' name='companyCode' value={form.companyCode} readOnly autoComplete='off' />
+              <input className='cf-input' name='client_code' value={form.client_code || '자동생성'} readOnly autoComplete='off' />
             </div>
             <div className='cf-field'>
               <label className='cf-label'>업체명 *</label>
-              <input className='cf-input' name='companyName' value={form.companyName} onChange={handleChange} autoComplete='off' />
+              <input className='cf-input' name='company_name' value={form.company_name} onChange={handleChange} autoComplete='off' />
             </div>
           </div>
 
-          {/* Row 2: 대표연락처 | 대표 담당자 */}
+          {/* Row 1-1: 사업자번호 | 대표연락처 */}
           <div className='cf-row cf-row-2col'>
+            <div className='cf-field'>
+              <label className='cf-label'>사업자번호 *</label>
+              <input className='cf-input' name='biz_no' value={form.biz_no} onChange={handleChange} autoComplete='off' />
+            </div>
             <div className='cf-field'>
               <label className='cf-label'>대표연락처 *</label>
               <input className='cf-input' name='tel' value={form.tel} onChange={handleChange} autoComplete='off' />
             </div>
-            <div className='cf-field'>
-              <label className='cf-label'>대표 담당자 *</label>
-              <input className='cf-input' name='repManager' value={form.repManager} onChange={handleChange} autoComplete='off' />
-            </div>
           </div>
 
-          {/* Row 3: 대표담당자 (이름 | 연락처 | 메일주소) */}
+          {/* Row 2: 대표자명 */}
+          <div className='cf-row cf-row-2col'>
+            <div className='cf-field'>
+              <label className='cf-label'>대표자명 *</label>
+              <input className='cf-input' name='ceo' value={form.ceo} onChange={handleChange} autoComplete='off' />
+            </div>
+            <div className='cf-field' />
+          </div>
+
+          {/* Row 3: 담당자 (이름 | 연락처 | 메일주소) */}
           <div className='cf-row'>
             <div className='cf-field cf-field-inline'>
-              <label className='cf-label'>대표담당자 *</label>
+              <label className='cf-label'>담당자 *</label>
               <div className='cf-inline-group'>
                 <div className='cf-inline-item'>
                   <span className='cf-inline-label'>이름</span>
-                  <input className='cf-input' name='managerName' value={form.managerName} onChange={handleChange} autoComplete='off' />
+                  <input className='cf-input' name='manager_name' value={form.manager_name} onChange={handleChange} autoComplete='off' />
                 </div>
                 <div className='cf-inline-item'>
                   <span className='cf-inline-label'>연락처</span>
-                  <input className='cf-input' name='managerTel' value={form.managerTel} onChange={handleChange} autoComplete='off' />
+                  <input className='cf-input' name='manager_tel' value={form.manager_tel} onChange={handleChange} autoComplete='off' />
                 </div>
                 <div className='cf-inline-item'>
                   <span className='cf-inline-label'>메일주소</span>
-                  <input className='cf-input' name='managerEmail' value={form.managerEmail} onChange={handleChange} autoComplete='off' />
+                  <input className='cf-input' name='manager_email' value={form.manager_email} onChange={handleChange} autoComplete='off' />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Row 4: 대표자명 (full width) */}
-          <div className='cf-row'>
-            <div className='cf-field'>
-              <label className='cf-label'>대표자명 *</label>
-              <input className='cf-input' name='ceo' value={form.ceo} onChange={handleChange} autoComplete='off' />
-            </div>
-          </div>
-
-          {/* Row 5: 주소 (full width) */}
+          {/* Row 4: 주소 (full width) */}
           <div className='cf-row'>
             <div className='cf-field'>
               <label className='cf-label'>주소</label>

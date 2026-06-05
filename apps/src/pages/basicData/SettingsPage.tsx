@@ -1,4 +1,62 @@
+import { useEffect, useState } from 'react'
+
+interface SettingsForm {
+  company_id:    string
+  user_id:       string
+  user_type:     string
+  company_name:  string
+  main_contact:  string
+  main_manager:  string
+  mobile:        string
+  manager_email: string
+}
+
 function SettingsPage() {
+  const user = JSON.parse(sessionStorage.getItem('user') || '{}')
+
+  const [form, setForm] = useState<SettingsForm>({
+    company_id:    '',
+    user_id:       '',
+    user_type:     '',
+    company_name:  '',
+    main_contact:  '',
+    main_manager:  '',
+    mobile:        '',
+    manager_email: '',
+  })
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  useEffect(() => {
+    if (!user.company_id || !user.user_id) return
+    fetch(`/api/settings.php?company_id=${encodeURIComponent(user.company_id)}&user_id=${encodeURIComponent(user.user_id)}`)
+      .then(r => r.json())
+      .then(res => { if (res.success) setForm(res.data) })
+  }, [])
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setForm(prev => ({ ...prev, [e.target.name]: e.target.value }))
+    setMessage(null)
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    setMessage(null)
+    try {
+      const res = await fetch('/api/settings.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      })
+      const data = await res.json()
+      setMessage({ type: data.success ? 'success' : 'error', text: data.message })
+    } catch {
+      setMessage({ type: 'error', text: '서버에 연결할 수 없습니다' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div className='page'>
       <div className='page-header'>
@@ -17,34 +75,55 @@ function SettingsPage() {
         </nav>
       </div>
       <div className='page-toolbar'>
-        <button className='btn-primary'>저장</button>
+        <button className='btn-primary' onClick={handleSave} disabled={saving}>
+          {saving ? '저장 중...' : '저장'}
+        </button>
       </div>
+      {message && (
+        <p style={{
+          textAlign: 'right',
+          fontSize: '1.3rem',
+          margin: '0.8rem 0 0',
+          color: message.type === 'success' ? '#38a169' : '#e53e3e',
+        }}>
+          {message.text}
+        </p>
+      )}
 
       <div className='content-card'>
         <div className='form-grid'>
           <div className='form-field'>
+            <label className='form-label'>회사 ID</label>
+            <input className='form-input' type='text' value={form.company_id} readOnly />
+          </div>
+          <div className='form-field'>
             <label className='form-label'>ID</label>
-            <input className='form-input' type='text' autoComplete='off' defaultValue='Goodwill' />
+            <input className='form-input' type='text' value={form.user_id} readOnly />
           </div>
           <div className='form-field'>
             <label className='form-label'>상호</label>
-            <input className='form-input' type='text' autoComplete='off' defaultValue='Goodwill' />
+            <input className='form-input' type='text' name='company_name' autoComplete='off'
+              value={form.company_name} onChange={handleChange} />
           </div>
           <div className='form-field'>
             <label className='form-label'>대표연락처</label>
-            <input className='form-input' type='text' autoComplete='off' defaultValue='02-777-6341' />
+            <input className='form-input' type='text' name='main_contact' autoComplete='off'
+              value={form.main_contact} onChange={handleChange} />
           </div>
           <div className='form-field'>
             <label className='form-label'>대표 담당자</label>
-            <input className='form-input' type='text' autoComplete='off' defaultValue='02-777-6341' />
+            <input className='form-input' type='text' name='main_manager' autoComplete='off'
+              value={form.main_manager} onChange={handleChange} />
           </div>
           <div className='form-field'>
             <label className='form-label'>연락처(핸드폰)</label>
-            <input className='form-input' type='text' autoComplete='off' defaultValue='010-4260-4857' />
+            <input className='form-input' type='text' name='mobile' autoComplete='off'
+              value={form.mobile} onChange={handleChange} />
           </div>
           <div className='form-field'>
             <label className='form-label'>담당자 이메일</label>
-            <input className='form-input' type='text' autoComplete='off' defaultValue='010-4260-4857' />
+            <input className='form-input' type='text' name='manager_email' autoComplete='off'
+              value={form.manager_email} onChange={handleChange} />
           </div>
         </div>
       </div>

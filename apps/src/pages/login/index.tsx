@@ -3,13 +3,44 @@ import { useNavigate } from 'react-router-dom'
 
 function LoginPage() {
   const navigate = useNavigate()
-  const [company, setCompany] = useState('TEXEVER')
-  const [id, setId] = useState('')
+  const [companyId, setCompanyId] = useState('')
+  const [userId, setUserId] = useState('')
   const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    navigate('/basic-data/settings')
+    setError('')
+
+    if (!companyId.trim() || !userId.trim() || !password.trim()) {
+      setError('회사아이디, 사용자아이디, 비밀번호를 모두 입력하세요')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const res = await fetch('/api/login.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          company_id: companyId.trim(),
+          user_id:    userId.trim(),
+          password:   password.trim(),
+        }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        sessionStorage.setItem('user', JSON.stringify(data.user))
+        navigate('/basic-data/settings')
+      } else {
+        setError(data.message || '로그인에 실패했습니다')
+      }
+    } catch {
+      setError('서버에 연결할 수 없습니다')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -18,25 +49,25 @@ function LoginPage() {
         <h1 className='login-title'>Login</h1>
         <form onSubmit={handleLogin} autoComplete='off'>
           <div className='login-field'>
-            <label htmlFor='login-company'>회사 ID</label>
-            <select
-              id='login-company'
-              value={company}
-              onChange={e => setCompany(e.target.value)}
-              disabled
-            >
-              <option value='TEXEVER'>TEXEVER +</option>
-            </select>
+            <label htmlFor='login-company-id'>회사 ID</label>
+            <input
+              id='login-company-id'
+              type='text'
+              placeholder='회사아이디를 입력하세요'
+              autoComplete='off'
+              value={companyId}
+              onChange={e => setCompanyId(e.target.value)}
+            />
           </div>
           <div className='login-field'>
-            <label htmlFor='login-id'>사용자 ID</label>
+            <label htmlFor='login-user-id'>사용자 ID</label>
             <input
-              id='login-id'
+              id='login-user-id'
               type='text'
-              placeholder='아이디를 입력하세요'
+              placeholder='사용자아이디를 입력하세요'
               autoComplete='off'
-              value={id}
-              onChange={e => setId(e.target.value)}
+              value={userId}
+              onChange={e => setUserId(e.target.value)}
             />
           </div>
           <div className='login-field'>
@@ -50,7 +81,14 @@ function LoginPage() {
               onChange={e => setPassword(e.target.value)}
             />
           </div>
-          <button type='submit' className='login-btn'>로그인</button>
+          {error && (
+            <p style={{ color: '#e53e3e', fontSize: '13px', margin: '0 0 8px' }}>
+              {error}
+            </p>
+          )}
+          <button type='submit' className='login-btn' disabled={loading}>
+            {loading ? '로그인 중...' : '로그인'}
+          </button>
         </form>
       </div>
     </div>

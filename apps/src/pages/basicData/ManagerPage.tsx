@@ -1,26 +1,50 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import ManagerAddModal from './ManagerAddModal'
 
-const INITIAL_DATA = [
-  { id: 'SON', name: '손도한', password: '*****', email: 'son@texeveroc.o.kr', phone: '010-2345-7856' },
-  { id: 'CHO', name: '조병철', password: '*****', email: 'son@texeveroc.o.kr', phone: '010-2345-7856' },
-]
-type RowData = typeof INITIAL_DATA[0]
-const TOTAL_PAGES = 10
+interface RowData {
+  id: number
+  manager_id: string
+  name: string
+  email: string
+  phone: string
+}
 
 function ManagerPage() {
-  const [data, setData] = useState(INITIAL_DATA)
-  const [currentPage, setCurrentPage] = useState(1)
-  const [showModal, setShowModal] = useState(false)
-  const [editingRow, setEditingRow] = useState<RowData | null>(null)
+  const user = JSON.parse(sessionStorage.getItem('user') || '{}')
 
-  const openAdd = () => { setEditingRow(null); setShowModal(true) }
+  const [data, setData]               = useState<RowData[]>([])
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages]   = useState(1)
+  const [showModal, setShowModal]     = useState(false)
+  const [editingRow, setEditingRow]   = useState<RowData | null>(null)
+
+  const PAGE_SIZE = 10
+
+  const fetchList = () => {
+    if (!user.company_id) return
+    fetch(`/api/managers.php?company_id=${encodeURIComponent(user.company_id)}`)
+      .then(r => r.json())
+      .then(res => {
+        if (res.success) {
+          setData(res.data)
+          setTotalPages(Math.max(1, Math.ceil(res.data.length / PAGE_SIZE)))
+        }
+      })
+  }
+
+  useEffect(() => { fetchList() }, [])
+
+  const pagedData = data.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+
+  const openAdd  = () => { setEditingRow(null); setShowModal(true) }
   const openEdit = (row: RowData) => { setEditingRow(row); setShowModal(true) }
   const closeModal = () => { setShowModal(false); setEditingRow(null) }
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: number) => {
     if (!window.confirm('삭제하시겠습니까?')) return
-    setData(prev => prev.filter(r => r.id !== id))
+    const res  = await fetch(`/api/managers.php?id=${id}&company_id=${encodeURIComponent(user.company_id)}`, { method: 'DELETE' })
+    const data = await res.json()
+    if (data.success) fetchList()
   }
 
   return (
@@ -44,7 +68,13 @@ function ManagerPage() {
         <button className='btn-primary' onClick={openAdd}>신규</button>
       </div>
 
-      {showModal && <ManagerAddModal onClose={closeModal} editData={editingRow ?? undefined} />}
+      {showModal && (
+        <ManagerAddModal
+          onClose={closeModal}
+          onSaved={fetchList}
+          editData={editingRow ?? undefined}
+        />
+      )}
 
       <div className='content-card'>
         <table className='data-table'>
@@ -59,11 +89,13 @@ function ManagerPage() {
             </tr>
           </thead>
           <tbody>
-            {data.map((row) => (
+            {pagedData.length === 0 ? (
+              <tr><td colSpan={6} style={{ textAlign: 'center', color: '#aaa' }}>등록된 담당자가 없습니다</td></tr>
+            ) : pagedData.map(row => (
               <tr key={row.id}>
-                <td>{row.id}</td>
+                <td>{row.manager_id}</td>
                 <td>{row.name}</td>
-                <td>{row.password}</td>
+                <td>*****</td>
                 <td>{row.email}</td>
                 <td>{row.phone}</td>
                 <td>
@@ -92,7 +124,7 @@ function ManagerPage() {
         <div className='pagination'>
           <button className='page-btn' onClick={() => setCurrentPage(1)}>«</button>
           <button className='page-btn' onClick={() => setCurrentPage(p => Math.max(1, p - 1))}>‹</button>
-          {Array.from({ length: TOTAL_PAGES }).map((_, i) => (
+          {Array.from({ length: totalPages }).map((_, i) => (
             <button
               key={i + 1}
               className={`page-btn${currentPage === i + 1 ? ' active' : ''}`}
@@ -101,8 +133,8 @@ function ManagerPage() {
               {i + 1}
             </button>
           ))}
-          <button className='page-btn' onClick={() => setCurrentPage(p => Math.min(TOTAL_PAGES, p + 1))}>›</button>
-          <button className='page-btn' onClick={() => setCurrentPage(TOTAL_PAGES)}>»</button>
+          <button className='page-btn' onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}>›</button>
+          <button className='page-btn' onClick={() => setCurrentPage(totalPages)}>»</button>
         </div>
       </div>
     </div>

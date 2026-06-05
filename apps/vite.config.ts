@@ -8,5 +8,13 @@ export default defineConfig({
     watch: {
       usePolling: true,
     },
+    proxy: {
+      '/api': {
+        target: 'https://newsclipping.mycafe24.com',
+        changeOrigin: true,
+        secure: true,
+        rewrite: (path: string) => path.replace(/^\/api/, '/backend/api'),
+      },
+    },
   },
 })

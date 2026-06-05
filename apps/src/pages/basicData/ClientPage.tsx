@@ -1,36 +1,47 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 interface ClientRow {
-  no: string
-  company: string
-  bizNo: string
-  ceo: string
-  manager: string
-  phone: string
-  email: string
+  id: number
+  client_code:   string
+  company_name:  string
+  biz_no:        string
+  ceo:           string
+  manager_name:  string
+  manager_tel:   string
+  manager_email: string
 }
 
-const INITIAL_DATA: ClientRow[] = [
-  { no: '0001', company: '오똑기', bizNo: '123-45-67890', ceo: '왕똑껹', manager: '김아무개', phone: '010-1234-2345', email: 'name@gmail.com' },
-  { no: '0002', company: '신협', bizNo: '123-45-67890', ceo: '왕똑껹', manager: '김아무개', phone: '010-1234-2345', email: 'name@gmail.com' },
-  { no: '0003', company: '천재교육', bizNo: '123-45-67890', ceo: '왕똑껹', manager: '김아무개', phone: '010-1234-2345', email: 'name@gmail.com' },
-]
-
-const TOTAL_PAGES = 10
+const PAGE_SIZE = 10
 
 function ClientPage() {
-  const [data, setData] = useState<ClientRow[]>(INITIAL_DATA)
-  const [currentPage, setCurrentPage] = useState(1)
-  const navigate = useNavigate()
+  const navigate  = useNavigate()
+  const user      = JSON.parse(sessionStorage.getItem('user') || '{}')
 
-  const handleEdit = (row: ClientRow) => {
-    navigate('/basic-data/client/new', { state: row })
+  const [data, setData]               = useState<ClientRow[]>([])
+  const [currentPage, setCurrentPage] = useState(1)
+
+  const fetchList = () => {
+    if (!user.company_id) return
+    fetch(`/api/clients.php?company_id=${encodeURIComponent(user.company_id)}`)
+      .then(r => r.json())
+      .then(res => { if (res.success) setData(res.data) })
   }
 
-  const handleDelete = (no: string) => {
+  useEffect(() => { fetchList() }, [])
+
+  const totalPages = Math.max(1, Math.ceil(data.length / PAGE_SIZE))
+  const pagedData  = data.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+
+  const handleEdit = (row: ClientRow) => {
+    navigate('/basic-data/client/edit', { state: { id: row.id } })
+  }
+
+  const handleDelete = async (id: number) => {
     if (!window.confirm('삭제하시겠습니까?')) return
-    setData(prev => prev.filter(r => r.no !== no))
+    const res  = await fetch(`/api/clients.php?id=${id}&company_id=${encodeURIComponent(user.company_id)}`, { method: 'DELETE' })
+    const data = await res.json()
+    if (data.success) fetchList()
   }
 
   return (
@@ -70,15 +81,17 @@ function ClientPage() {
             </tr>
           </thead>
           <tbody>
-            {data.map(row => (
-              <tr key={row.no}>
-                <td>{row.no}</td>
-                <td>{row.company}</td>
-                <td>{row.bizNo}</td>
+            {pagedData.length === 0 ? (
+              <tr><td colSpan={8} style={{ textAlign: 'center', color: '#aaa' }}>등록된 클라이언트가 없습니다</td></tr>
+            ) : pagedData.map(row => (
+              <tr key={row.id}>
+                <td>{row.client_code}</td>
+                <td>{row.company_name}</td>
+                <td>{row.biz_no}</td>
                 <td>{row.ceo}</td>
-                <td>{row.manager}</td>
-                <td>{row.phone}</td>
-                <td>{row.email}</td>
+                <td>{row.manager_name}</td>
+                <td>{row.manager_tel}</td>
+                <td>{row.manager_email}</td>
                 <td>
                   <div className='table-actions'>
                     <button className='btn-icon' title='편집' onClick={() => handleEdit(row)}>
@@ -87,7 +100,7 @@ function ClientPage() {
                         <path d='M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' />
                       </svg>
                     </button>
-                    <button className='btn-icon' title='삭제' onClick={() => handleDelete(row.no)}>
+                    <button className='btn-icon' title='삭제' onClick={() => handleDelete(row.id)}>
                       <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'>
                         <polyline points='3 6 5 6 21 6' />
                         <path d='M19 6l-1 14H6L5 6' />
@@ -105,7 +118,7 @@ function ClientPage() {
         <div className='pagination'>
           <button className='page-btn' onClick={() => setCurrentPage(1)} disabled={currentPage === 1}>«</button>
           <button className='page-btn' onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>‹</button>
-          {Array.from({ length: TOTAL_PAGES }).map((_, i) => (
+          {Array.from({ length: totalPages }).map((_, i) => (
             <button
               key={i + 1}
               className={`page-btn${currentPage === i + 1 ? ' active' : ''}`}
@@ -114,8 +127,8 @@ function ClientPage() {
               {i + 1}
             </button>
           ))}
-          <button className='page-btn' onClick={() => setCurrentPage(p => Math.min(TOTAL_PAGES, p + 1))} disabled={currentPage === TOTAL_PAGES}>›</button>
-          <button className='page-btn' onClick={() => setCurrentPage(TOTAL_PAGES)} disabled={currentPage === TOTAL_PAGES}>»</button>
+          <button className='page-btn' onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>›</button>
+          <button className='page-btn' onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages}>»</button>
         </div>
       </div>
     </div>

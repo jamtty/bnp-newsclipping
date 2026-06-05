@@ -1,33 +1,44 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 interface MediaRow {
-  id: string
-  name: string
-  region: string
-  tel: string
+  id: number
+  media_code: string
+  media_name: string
+  region:     string
+  tel:        string
 }
 
-const INITIAL_DATA: MediaRow[] = [
-  { id: '0001', name: 'SBS Biz', region: '서울', tel: '010-2345-7856' },
-  { id: '0002', name: '공감신문', region: '서울', tel: '010-2345-7856' },
-  { id: '0003', name: '', region: '서울', tel: '010-2345-7856' },
-]
-
-const TOTAL_PAGES = 10
+const PAGE_SIZE = 10
 
 function MediaPage() {
-  const [data, setData] = useState<MediaRow[]>(INITIAL_DATA)
-  const [currentPage, setCurrentPage] = useState(1)
-  const navigate = useNavigate()
+  const navigate  = useNavigate()
+  const user      = JSON.parse(sessionStorage.getItem('user') || '{}')
 
-  const handleEdit = (row: MediaRow) => {
-    navigate('/basic-data/media/new', { state: row })
+  const [data, setData]               = useState<MediaRow[]>([])
+  const [currentPage, setCurrentPage] = useState(1)
+
+  const fetchList = () => {
+    if (!user.company_id) return
+    fetch(`/api/media.php?company_id=${encodeURIComponent(user.company_id)}`)
+      .then(r => r.json())
+      .then(res => { if (res.success) setData(res.data) })
   }
 
-  const handleDelete = (id: string) => {
+  useEffect(() => { fetchList() }, [])
+
+  const totalPages = Math.max(1, Math.ceil(data.length / PAGE_SIZE))
+  const pagedData  = data.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+
+  const handleEdit = (row: MediaRow) => {
+    navigate('/basic-data/media/new', { state: { id: row.id } })
+  }
+
+  const handleDelete = async (id: number) => {
     if (!window.confirm('삭제하시겠습니까?')) return
-    setData(prev => prev.filter(r => r.id !== id))
+    const res  = await fetch(`/api/media.php?id=${id}&company_id=${encodeURIComponent(user.company_id)}`, { method: 'DELETE' })
+    const data = await res.json()
+    if (data.success) fetchList()
   }
 
   return (
@@ -64,10 +75,12 @@ function MediaPage() {
             </tr>
           </thead>
           <tbody>
-            {data.map(row => (
+            {pagedData.length === 0 ? (
+              <tr><td colSpan={5} style={{ textAlign: 'center', color: '#aaa' }}>등록된 매체가 없습니다</td></tr>
+            ) : pagedData.map(row => (
               <tr key={row.id}>
-                <td>{row.id}</td>
-                <td>{row.name}</td>
+                <td>{row.media_code}</td>
+                <td>{row.media_name}</td>
                 <td>{row.region}</td>
                 <td>{row.tel}</td>
                 <td>
@@ -96,17 +109,11 @@ function MediaPage() {
         <div className='pagination'>
           <button className='page-btn' onClick={() => setCurrentPage(1)} disabled={currentPage === 1}>«</button>
           <button className='page-btn' onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>‹</button>
-          {Array.from({ length: TOTAL_PAGES }).map((_, i) => (
-            <button
-              key={i + 1}
-              className={`page-btn${currentPage === i + 1 ? ' active' : ''}`}
-              onClick={() => setCurrentPage(i + 1)}
-            >
-              {i + 1}
-            </button>
+          {Array.from({ length: totalPages }).map((_, i) => (
+            <button key={i + 1} className={`page-btn${currentPage === i + 1 ? ' active' : ''}`} onClick={() => setCurrentPage(i + 1)}>{i + 1}</button>
           ))}
-          <button className='page-btn' onClick={() => setCurrentPage(p => Math.min(TOTAL_PAGES, p + 1))} disabled={currentPage === TOTAL_PAGES}>›</button>
-          <button className='page-btn' onClick={() => setCurrentPage(TOTAL_PAGES)} disabled={currentPage === TOTAL_PAGES}>»</button>
+          <button className='page-btn' onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>›</button>
+          <button className='page-btn' onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages}>»</button>
         </div>
       </div>
     </div>

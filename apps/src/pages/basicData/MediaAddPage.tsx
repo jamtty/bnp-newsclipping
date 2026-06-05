@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import Modal from '../../components/common/Modal'
 
@@ -11,29 +11,45 @@ interface JournalistItem {
 }
 
 function MediaAddPage() {
-  const navigate = useNavigate()
-  const location = useLocation()
-  const editData = location.state as { id: string; name: string; region: string; tel: string } | null
+  const navigate  = useNavigate()
+  const location  = useLocation()
+  const editId    = (location.state as { id?: number } | null)?.id ?? null
+  const user      = JSON.parse(sessionStorage.getItem('user') || '{}')
 
   const [form, setForm] = useState({
-    mediaId: editData?.id ?? '0001',
-    mediaName: editData?.name ?? '',
-    region: editData?.region ?? '',
-    tel: editData?.tel ?? '',
-    address: '',
+    media_code: '',
+    media_name: '',
+    region:     '',
+    tel:        '',
+    address:    '',
   })
-
-  const [journalists, setJournalists] = useState<JournalistItem[]>([
-    { id: 1, name: '오똑기 행사', tel: '010-1234-4567', email: 'mail.gmail.com', memo: '' },
-    { id: 2, name: '오똑기 행사', tel: '010-1234-4567', email: 'mail.gmail.com', memo: '' },
-    { id: 3, name: '오똑기 행사', tel: '010-1234-4567', email: 'mail.gmail.com', memo: '' },
-    { id: 4, name: '오똑기 행사', tel: '010-1234-4567', email: 'mail.gmail.com', memo: '' },
-    { id: 5, name: '오똑기 행사', tel: '010-1234-4567', email: 'mail.gmail.com', memo: '' },
-  ])
-
-  const [showModal, setShowModal] = useState(false)
+  const [journalists, setJournalists]             = useState<JournalistItem[]>([])
+  const [showModal, setShowModal]                 = useState(false)
   const [editingJournalist, setEditingJournalist] = useState<JournalistItem | null>(null)
-  const [modalForm, setModalForm] = useState({ name: '', tel: '', email: '', memo: '' })
+  const [modalForm, setModalForm]                 = useState({ name: '', tel: '', email: '', memo: '' })
+  const [saving, setSaving] = useState(false)
+  const [error, setError]   = useState('')
+
+  useEffect(() => {
+    if (!editId) return
+    fetch(`/api/media.php?company_id=${encodeURIComponent(user.company_id)}&id=${editId}`)
+      .then(r => r.json())
+      .then(res => {
+        if (res.success) {
+          const d = res.data
+          setForm({
+            media_code: d.media_code ?? '',
+            media_name: d.media_name ?? '',
+            region:     d.region     ?? '',
+            tel:        d.tel        ?? '',
+            address:    d.address    ?? '',
+          })
+          setJournalists((d.journalists ?? []).map((j: JournalistItem) => ({
+            id: j.id, name: j.name, tel: j.tel, email: j.email, memo: j.memo,
+          })))
+        }
+      })
+  }, [editId])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm(prev => ({ ...prev, [e.target.name]: e.target.value }))
@@ -58,9 +74,7 @@ function MediaAddPage() {
   const handleSaveJournalist = () => {
     if (!modalForm.name.trim()) return
     if (editingJournalist) {
-      setJournalists(prev =>
-        prev.map(j => j.id === editingJournalist.id ? { ...j, ...modalForm } : j)
-      )
+      setJournalists(prev => prev.map(j => j.id === editingJournalist.id ? { ...j, ...modalForm } : j))
     } else {
       setJournalists(prev => [...prev, { id: Date.now(), ...modalForm }])
     }
@@ -71,6 +85,31 @@ function MediaAddPage() {
   const handleDeleteJournalist = (id: number) => {
     if (!window.confirm('삭제하시겠습니까?')) return
     setJournalists(prev => prev.filter(j => j.id !== id))
+  }
+
+  const handleSave = async () => {
+    if (!form.media_name.trim()) { setError('매체명을 입력하세요'); return }
+    setSaving(true); setError('')
+    try {
+      const body = {
+        company_id: user.company_id,
+        ...form,
+        journalists: journalists.map(j => ({ name: j.name, tel: j.tel, email: j.email, memo: j.memo })),
+        ...(editId ? { id: editId } : {}),
+      }
+      const res  = await fetch('/api/media.php', {
+        method: editId ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json()
+      if (data.success) navigate('/basic-data/media')
+      else setError(data.message || '저장 실패')
+    } catch {
+      setError('서버에 연결할 수 없습니다')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -89,14 +128,17 @@ function MediaAddPage() {
           <span className='breadcrumb-sep'>›</span>
           <span className='breadcrumb-item' onClick={() => navigate('/basic-data/media')} style={{ cursor: 'pointer' }}>뉴스매체</span>
           <span className='breadcrumb-sep'>›</span>
-          <span className='breadcrumb-item active'>{editData ? '수정' : '신규등록'}</span>
+          <span className='breadcrumb-item active'>{editId ? '수정' : '신규등록'}</span>
         </nav>
       </div>
 
       <div className='page-toolbar'>
         <button className='btn-secondary' type='button' onClick={() => navigate('/basic-data/media')}>목록</button>
-        <button className='btn-primary' type='button'>저장</button>
+        <button className='btn-primary' type='button' onClick={handleSave} disabled={saving}>
+          {saving ? '저장 중...' : '저장'}
+        </button>
       </div>
+      {error && <p style={{ textAlign: 'right', color: '#e53e3e', fontSize: '1.3rem', margin: '0.4rem 0 0' }}>{error}</p>}
 
       <div className='content-card'>
         <div className='client-form'>
@@ -105,11 +147,11 @@ function MediaAddPage() {
           <div className='cf-row cf-row-2col'>
             <div className='cf-field'>
               <label className='cf-label'>뉴스매체 ID *</label>
-              <input className='cf-input' name='mediaId' value={form.mediaId} readOnly autoComplete='off' />
+              <input className='cf-input' name='media_code' value={form.media_code || '자동생성'} readOnly autoComplete='off' />
             </div>
             <div className='cf-field'>
               <label className='cf-label'>매체명 *</label>
-              <input className='cf-input' name='mediaName' value={form.mediaName} onChange={handleChange} autoComplete='off' />
+              <input className='cf-input' name='media_name' value={form.media_name} onChange={handleChange} autoComplete='off' />
             </div>
           </div>
 
