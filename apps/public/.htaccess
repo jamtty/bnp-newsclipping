@@ -1,4 +1,8 @@
 Options -MultiViews
 RewriteEngine On
+
+# /api/* → /backend/api/* (운영서버 경로 매핑)
+RewriteRule ^api/(.*)$ /backend/api/$1 [L,QSA]
+
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteRule ^ index.html [QSA,L]
