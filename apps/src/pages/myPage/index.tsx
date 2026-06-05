@@ -124,14 +124,14 @@ function MyPage() {
           {pwError && (
             <p style={{ color: '#e53e3e', fontSize: '13px', margin: '8px 0 0' }}>{pwError}</p>
           )}
-          {pwSuccess && (
-            <p style={{ color: '#38a169', fontSize: '13px', margin: '8px 0 0' }}>{pwSuccess}</p>
-          )}
           <div style={{ marginTop: '16px', display: 'flex', justifyContent: 'flex-end' }}>
             <button type='submit' className='btn-primary' disabled={pwLoading}>
               {pwLoading ? '변경 중...' : '비밀번호 변경'}
             </button>
           </div>
+          {pwSuccess && (
+            <p style={{ color: '#38a169', fontSize: '13px', margin: '8px 0 0', textAlign: 'right' }}>{pwSuccess}</p>
+          )}
         </form>
       </div>
     </div>
