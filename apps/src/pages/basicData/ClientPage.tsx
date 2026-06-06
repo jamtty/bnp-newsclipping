@@ -3,13 +3,15 @@ import { useNavigate } from 'react-router-dom'
 
 interface ClientRow {
   id: number
-  client_code:   string
-  company_name:  string
-  biz_no:        string
-  ceo:           string
-  manager_name:  string
-  manager_tel:   string
-  manager_email: string
+  client_code:        string
+  company_name:       string
+  biz_no:             string
+  ceo:                string
+  manager_name:       string
+  manager_tel:        string
+  manager_email:      string
+  company_id?:        string
+  admin_company_name?: string
 }
 
 const PAGE_SIZE = 10
@@ -19,29 +21,55 @@ function ClientPage() {
   const user      = JSON.parse(sessionStorage.getItem('user') || '{}')
 
   const [data, setData]               = useState<ClientRow[]>([])
+  const [companies, setCompanies]     = useState<{ company_id: string; company_name: string }[]>([])
+  const [selectedCompany, setSelectedCompany] = useState<string>('all')
   const [currentPage, setCurrentPage] = useState(1)
 
   const fetchList = () => {
-    if (!user.company_id) return
-    fetch(`/api/clients.php?company_id=${encodeURIComponent(user.company_id)}`)
+    let url = '/api/clients.php'
+    if (user.user_type === 'super_admin') {
+      if (selectedCompany && selectedCompany !== 'all') url += `?company_id=${encodeURIComponent(selectedCompany)}`
+    } else {
+      if (!user.company_id) return
+      url += `?company_id=${encodeURIComponent(user.company_id)}`
+    }
+    fetch(url)
       .then(r => r.json())
       .then(res => { if (res.success) setData(res.data) })
   }
 
-  useEffect(() => { fetchList() }, [])
+  useEffect(() => { fetchList() }, [selectedCompany])
+
+  useEffect(() => {
+    if (user.user_type === 'super_admin') {
+      fetch('/api/companies.php')
+        .then(r => r.json())
+        .then(res => { if (res.success) setCompanies(res.data) })
+    }
+  }, [])
 
   const totalPages = Math.max(1, Math.ceil(data.length / PAGE_SIZE))
   const pagedData  = data.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
 
   const handleEdit = (row: ClientRow) => {
-    navigate('/basic-data/client/edit', { state: { id: row.id } })
+    navigate('/basic-data/client/edit', { state: { id: row.id, company_id: row.company_id } })
   }
 
   const handleDelete = async (id: number) => {
     if (!window.confirm('삭제하시겠습니까?')) return
-    const res  = await fetch(`/api/clients.php?id=${id}&company_id=${encodeURIComponent(user.company_id)}`, { method: 'DELETE' })
-    const data = await res.json()
-    if (data.success) fetchList()
+    let url = `/api/clients.php?id=${id}`
+    if (user.user_type === 'super_admin') {
+      if (selectedCompany && selectedCompany !== 'all') url += `&company_id=${encodeURIComponent(selectedCompany)}`
+      else {
+        const row = data.find(d => d.id === id)
+        if (row && row.company_id) url += `&company_id=${encodeURIComponent(row.company_id)}`
+      }
+    } else {
+      url += `&company_id=${encodeURIComponent(user.company_id)}`
+    }
+    const res  = await fetch(url, { method: 'DELETE' })
+    const resJson = await res.json()
+    if (resJson.success) fetchList()
   }
 
   return (
@@ -63,6 +91,17 @@ function ClientPage() {
       </div>
 
       <div className='page-toolbar'>
+        {user.user_type === 'super_admin' && (
+          <select
+            className='cf-input company-select'
+            value={selectedCompany}
+            onChange={e => setSelectedCompany(e.target.value)}
+            style={{ marginRight: '8px', minWidth: 220 }}
+          >
+            <option value='all'>전체 담당업체</option>
+            {companies.map(c => <option key={c.company_id} value={c.company_id}>{c.company_name} ({c.company_id})</option>)}
+          </select>
+        )}
         <button className='btn-primary' onClick={() => navigate('/basic-data/client/new')}>신규</button>
       </div>
 
@@ -70,6 +109,7 @@ function ClientPage() {
         <table className='data-table'>
           <thead>
             <tr>
+              {user.user_type === 'super_admin' && <th className='col-admin-company'>담당업체</th>}
               <th>No.</th>
               <th>업체명</th>
               <th>사업자번호</th>
@@ -82,9 +122,10 @@ function ClientPage() {
           </thead>
           <tbody>
             {pagedData.length === 0 ? (
-              <tr><td colSpan={8} style={{ textAlign: 'center', color: '#aaa' }}>등록된 클라이언트가 없습니다</td></tr>
+              <tr><td colSpan={user.user_type === 'super_admin' ? 9 : 8} style={{ textAlign: 'center', color: '#aaa' }}>등록된 클라이언트가 없습니다</td></tr>
             ) : pagedData.map(row => (
               <tr key={row.id}>
+                {user.user_type === 'super_admin' && <td className='col-admin-company'>{row.admin_company_name ? `${row.admin_company_name} (${row.company_id})` : row.company_id}</td>}
                 <td>{row.client_code}</td>
                 <td>{row.company_name}</td>
                 <td>{row.biz_no}</td>

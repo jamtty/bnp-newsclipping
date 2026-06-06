@@ -7,12 +7,16 @@ interface RowData {
   name: string
   email: string
   phone: string
+  company_id?: string
+  company_name?: string
 }
 
 function ManagerPage() {
   const user = JSON.parse(sessionStorage.getItem('user') || '{}')
 
   const [data, setData]               = useState<RowData[]>([])
+  const [companies, setCompanies]     = useState<{ company_id: string; company_name: string }[]>([])
+  const [selectedCompany, setSelectedCompany] = useState<string>('all')
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages]   = useState(1)
   const [showModal, setShowModal]     = useState(false)
@@ -21,8 +25,14 @@ function ManagerPage() {
   const PAGE_SIZE = 10
 
   const fetchList = () => {
-    if (!user.company_id) return
-    fetch(`/api/managers.php?company_id=${encodeURIComponent(user.company_id)}`)
+    let url = '/api/managers.php'
+    if (user.user_type === 'super_admin') {
+      if (selectedCompany && selectedCompany !== 'all') url += `?company_id=${encodeURIComponent(selectedCompany)}`
+    } else {
+      if (!user.company_id) return
+      url += `?company_id=${encodeURIComponent(user.company_id)}`
+    }
+    fetch(url)
       .then(r => r.json())
       .then(res => {
         if (res.success) {
@@ -32,7 +42,15 @@ function ManagerPage() {
       })
   }
 
-  useEffect(() => { fetchList() }, [])
+  useEffect(() => { fetchList() }, [selectedCompany])
+
+  useEffect(() => {
+    if (user.user_type === 'super_admin') {
+      fetch('/api/companies.php')
+        .then(r => r.json())
+        .then(res => { if (res.success) setCompanies(res.data) })
+    }
+  }, [])
 
   const pagedData = data.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
 
@@ -42,9 +60,19 @@ function ManagerPage() {
 
   const handleDelete = async (id: number) => {
     if (!window.confirm('삭제하시겠습니까?')) return
-    const res  = await fetch(`/api/managers.php?id=${id}&company_id=${encodeURIComponent(user.company_id)}`, { method: 'DELETE' })
-    const data = await res.json()
-    if (data.success) fetchList()
+    let url = `/api/managers.php?id=${id}`
+    if (user.user_type === 'super_admin') {
+      if (selectedCompany && selectedCompany !== 'all') url += `&company_id=${encodeURIComponent(selectedCompany)}`
+      else {
+        const row = data.find(d => d.id === id)
+        if (row && row.company_id) url += `&company_id=${encodeURIComponent(row.company_id)}`
+      }
+    } else {
+      url += `&company_id=${encodeURIComponent(user.company_id)}`
+    }
+    const res  = await fetch(url, { method: 'DELETE' })
+    const resJson = await res.json()
+    if (resJson.success) fetchList()
   }
 
   return (
@@ -65,6 +93,17 @@ function ManagerPage() {
         </nav>
       </div>
       <div className='page-toolbar'>
+        {user.user_type === 'super_admin' && (
+          <select
+            className='cf-input company-select'
+            value={selectedCompany}
+            onChange={e => setSelectedCompany(e.target.value)}
+            style={{ marginRight: '8px', minWidth: 220 }}
+          >
+            <option value='all'>전체 담당업체</option>
+            {companies.map(c => <option key={c.company_id} value={c.company_id}>{c.company_name} ({c.company_id})</option>)}
+          </select>
+        )}
         <button className='btn-primary' onClick={openAdd}>신규</button>
       </div>
 
@@ -80,6 +119,7 @@ function ManagerPage() {
         <table className='data-table'>
           <thead>
             <tr>
+              {user.user_type === 'super_admin' && <th className='col-admin-company'>담당업체</th>}
               <th>담당자 ID</th>
               <th>한글이름</th>
               <th>Password</th>
@@ -93,6 +133,7 @@ function ManagerPage() {
               <tr><td colSpan={6} style={{ textAlign: 'center', color: '#aaa' }}>등록된 담당자가 없습니다</td></tr>
             ) : pagedData.map(row => (
               <tr key={row.id}>
+                {user.user_type === 'super_admin' && <td className='col-admin-company'>{row.company_name ? `${row.company_name} (${row.company_id})` : row.company_id}</td>}
                 <td>{row.manager_id}</td>
                 <td>{row.name}</td>
                 <td>*****</td>

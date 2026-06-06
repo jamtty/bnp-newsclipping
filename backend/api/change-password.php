@@ -40,6 +40,7 @@ $company_id = trim($body['company_id'] ?? '');
 $user_id    = trim($body['user_id']    ?? '');
 $current_pw = trim($body['current_pw'] ?? '');
 $new_pw     = trim($body['new_pw']     ?? '');
+$user_type  = trim($body['user_type']  ?? 'admin');
 
 if ($company_id === '' || $user_id === '' || $current_pw === '' || $new_pw === '') {
     http_response_code(400);
@@ -56,21 +57,37 @@ if (mb_strlen($new_pw) < 4) {
 require_once dirname(__DIR__) . '/config.php';
 
 try {
-    // 현재 비밀번호 확인
-    $stmt = $pdo->prepare('SELECT `password` FROM `users` WHERE `company_id` = ? AND `user_id` = ? LIMIT 1');
-    $stmt->execute([$company_id, $user_id]);
-    $user = $stmt->fetch();
+    if ($user_type === 'manager') {
+        // managers 테이블에서 비밀번호 변경
+        $stmt = $pdo->prepare('SELECT `password` FROM `managers` WHERE `company_id` = ? AND `manager_id` = ? LIMIT 1');
+        $stmt->execute([$company_id, $user_id]);
+        $row = $stmt->fetch();
 
-    if (!$user || !password_verify($current_pw, $user['password'])) {
-        http_response_code(401);
-        echo json_encode(['success' => false, 'message' => '현재 비밀번호가 올바르지 않습니다']);
-        exit;
+        if (!$row || !password_verify($current_pw, $row['password'])) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => '현재 비밀번호가 올바르지 않습니다']);
+            exit;
+        }
+
+        $newHash = password_hash($new_pw, PASSWORD_BCRYPT);
+        $upd = $pdo->prepare('UPDATE `managers` SET `password` = ? WHERE `company_id` = ? AND `manager_id` = ?');
+        $upd->execute([$newHash, $company_id, $user_id]);
+    } else {
+        // users 테이블에서 비밀번호 변경
+        $stmt = $pdo->prepare('SELECT `password` FROM `users` WHERE `company_id` = ? AND `user_id` = ? LIMIT 1');
+        $stmt->execute([$company_id, $user_id]);
+        $user = $stmt->fetch();
+
+        if (!$user || !password_verify($current_pw, $user['password'])) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => '현재 비밀번호가 올바르지 않습니다']);
+            exit;
+        }
+
+        $newHash = password_hash($new_pw, PASSWORD_BCRYPT);
+        $upd = $pdo->prepare('UPDATE `users` SET `password` = ? WHERE `company_id` = ? AND `user_id` = ?');
+        $upd->execute([$newHash, $company_id, $user_id]);
     }
-
-    // 새 비밀번호 저장
-    $newHash = password_hash($new_pw, PASSWORD_BCRYPT);
-    $upd     = $pdo->prepare('UPDATE `users` SET `password` = ? WHERE `company_id` = ? AND `user_id` = ?');
-    $upd->execute([$newHash, $company_id, $user_id]);
 
     echo json_encode(['success' => true, 'message' => '비밀번호가 변경되었습니다']);
 

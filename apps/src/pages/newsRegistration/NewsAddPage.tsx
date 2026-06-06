@@ -1,57 +1,153 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 
-interface NewsRow {
-  id: number
-  regDate: string
-  manager: string
-  client: string
-  category: string
-  mediaType: string
-  headline: string
-  link: string
-}
+interface ClientOption { id: number; client_code: string; company_name: string }
+interface MediaOption  { media_code: string; media_name: string }
+interface JournalistOption { id: number; name: string }
+interface CategoryOption { id: number; name: string }
 
-const CLIENT_OPTIONS = ['온라인', '오두기', '신협', '천재교육']
-const MEDIA_OPTIONS = ['브릿지경제', '매일경제', '한국경제', '조선일보']
-const JOURNALIST_OPTIONS = ['이병권', '김기자', '박기자']
 const MEDIA_TYPE_OPTIONS = ['온라인', '지면', '통신사']
-const CATEGORY_OPTIONS = ['신제품', '글로벌', 'ESG', '경쟁사']
 
 function NewsAddPage() {
-  const navigate = useNavigate()
-  const location = useLocation()
-  const editData = location.state as NewsRow | null
-  const isEdit = !!editData
+  const navigate   = useNavigate()
+  const location   = useLocation()
+  const editData   = location.state as { id: number; company_id?: string } | null
+  const isEdit     = !!editData
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const user       = JSON.parse(sessionStorage.getItem('user') || '{}')
+  const companyId  = user.company_id || ''
+
+  const [clients,     setClients]     = useState<ClientOption[]>([])
+  const [mediaList,   setMediaList]   = useState<MediaOption[]>([])
+  const [journalists, setJournalists] = useState<JournalistOption[]>([])
+  const [categories,  setCategories]  = useState<CategoryOption[]>([])
 
   const [form, setForm] = useState({
-    serial: editData ? `2025${String(editData.id).padStart(8, '0')}` : '',
-    manager: editData?.manager ?? '',
-    regDate: editData?.regDate.split(' ')[0] ?? '',
-    regTime: editData?.regDate.split(' ')[1] ?? '',
-    client: editData?.client ?? '',
-    media: editData ? MEDIA_OPTIONS[0] : '',
-    journalist: editData ? JOURNALIST_OPTIONS[0] : '',
-    categories: editData?.category ? [editData.category] : [] as string[],
-    mediaType: editData?.mediaType ?? '',
-    headline: editData?.headline.startsWith('http') ? editData.headline : '',
-    link: editData?.link ?? '',
-    fileName: '',
+    serial:       '',
+    manager:      user.name || user.user_id || '',
+    reg_date:     '',
+    reg_time:     '',
+    client_id:    '',
+    client_name:  '',
+    media_code:   '',
+    media_name:   '',
+    journalist:   '',
+    categories:   [] as string[],
+    media_type:   '온라인',
+    headline:     '',
+    link:         '',
   })
+  const [file,    setFile]    = useState<File | null>(null)
+  const [saving,  setSaving]  = useState(false)
+  const [error,   setError]   = useState('')
 
-  const handleCategoryToggle = (cat: string) => {
+  useEffect(() => {
+    fetch(`/api/clients.php?company_id=${encodeURIComponent(companyId)}`)
+      .then(r => r.json()).then(res => { if (res.success) setClients(res.data) })
+    fetch(`/api/media.php?company_id=${encodeURIComponent(companyId)}`)
+      .then(r => r.json()).then(res => { if (res.success) setMediaList(res.data) })
+  }, [])
+
+  useEffect(() => {
+    if (!form.media_code) { setJournalists([]); return }
+    fetch(`/api/media.php?company_id=${encodeURIComponent(companyId)}&id=${encodeURIComponent(form.media_code)}&by_code=1`)
+      .then(r => r.json())
+      .then(res => {
+        if (res.success && res.data?.journalists) setJournalists(res.data.journalists)
+        else setJournalists([])
+      })
+  }, [form.media_code])
+
+  useEffect(() => {
+    if (!form.client_id) { setCategories([]); return }
+    fetch(`/api/clients.php?company_id=${encodeURIComponent(companyId)}&id=${form.client_id}`)
+      .then(r => r.json())
+      .then(res => {
+        if (res.success && res.data?.categories) setCategories(res.data.categories)
+        else setCategories([])
+      })
+  }, [form.client_id])
+
+  useEffect(() => {
+    if (!isEdit || !editData.id) return
+    const cid = editData.company_id || companyId
+    fetch(`/api/news.php?company_id=${encodeURIComponent(cid)}&id=${editData.id}`)
+      .then(r => r.json())
+      .then(res => {
+        if (!res.success) return
+        const d = res.data
+        setForm({
+          serial:      d.serial      || '',
+          manager:     d.manager     || '',
+          reg_date:    d.reg_date    || '',
+          reg_time:    d.reg_time    || '',
+          client_id:   d.client_id   ? String(d.client_id) : '',
+          client_name: d.client_name || '',
+          media_code:  d.media_code  || '',
+          media_name:  d.media_name  || '',
+          journalist:  d.journalist  || '',
+          categories:  d.categories  ? d.categories.split(',') : [],
+          media_type:  d.media_type  || '온라인',
+          headline:    d.headline    || '',
+          link:        d.link        || '',
+        })
+      })
+  }, [])
+
+  const handleCategoryToggle = (name: string) => {
     setForm(prev => ({
       ...prev,
-      categories: prev.categories.includes(cat)
-        ? prev.categories.filter(c => c !== cat)
-        : [...prev.categories, cat],
+      categories: prev.categories.includes(name)
+        ? prev.categories.filter(c => c !== name)
+        : [...prev.categories, name],
     }))
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) setForm(prev => ({ ...prev, fileName: file.name }))
+  const handleMediaChange = (code: string) => {
+    const m = mediaList.find(m => m.media_code === code)
+    setForm(prev => ({ ...prev, media_code: code, media_name: m?.media_name || '', journalist: '' }))
+    setJournalists([])
+  }
+
+  const handleClientChange = (id: string) => {
+    const c = clients.find(c => String(c.id) === id)
+    setForm(prev => ({ ...prev, client_id: id, client_name: c?.company_name || '' }))
+    setCategories([])
+  }
+
+  const handleSave = async () => {
+    if (!form.client_id)       { setError('클라이언트를 선택하세요'); return }
+    if (!form.media_code)      { setError('뉴스매체를 선택하세요'); return }
+    if (!form.headline.trim()) { setError('기사 Head line을 입력하세요'); return }
+
+    setSaving(true); setError('')
+    try {
+      const fd = new FormData()
+      fd.append('company_id',  companyId)
+      fd.append('manager',     form.manager)
+      fd.append('reg_date',    form.reg_date)
+      fd.append('reg_time',    form.reg_time)
+      fd.append('client_id',   form.client_id)
+      fd.append('client_name', form.client_name)
+      fd.append('media_code',  form.media_code)
+      fd.append('media_name',  form.media_name)
+      fd.append('journalist',  form.journalist)
+      fd.append('categories',  form.categories.join(','))
+      fd.append('media_type',  form.media_type)
+      fd.append('headline',    form.headline)
+      fd.append('link',        form.link)
+      if (file) fd.append('file', file)
+      if (isEdit) fd.append('id', String(editData.id))
+
+      const res  = await fetch('/api/news.php', { method: isEdit ? 'PUT' : 'POST', body: fd })
+      const data = await res.json()
+      if (data.success) navigate('/news-registration')
+      else setError(data.message || '저장 실패')
+    } catch {
+      setError('서버에 연결할 수 없습니다')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -73,8 +169,12 @@ function NewsAddPage() {
       </div>
 
       <div className='page-toolbar'>
-        <button className='btn-primary' onClick={() => navigate('/news-registration')}>저장</button>
+        <button className='btn-secondary' type='button' onClick={() => navigate('/news-registration')}>목록</button>
+        <button className='btn-primary' type='button' onClick={handleSave} disabled={saving}>
+          {saving ? '저장 중...' : '저장'}
+        </button>
       </div>
+      {error && <p style={{ textAlign: 'right', color: '#e53e3e', fontSize: '1.3rem', margin: '0.4rem 0 0' }}>{error}</p>}
 
       <div className='content-card'>
         <div className='news-form'>
@@ -83,7 +183,7 @@ function NewsAddPage() {
           <div className='nf-row'>
             <div className='nf-field'>
               <span className='nf-label'>SERIAL</span>
-              <input className='nf-input nf-input-readonly' value={form.serial} readOnly />
+              <input className='nf-input nf-input-readonly' value={form.serial || '자동생성'} readOnly />
             </div>
           </div>
 
@@ -104,25 +204,17 @@ function NewsAddPage() {
             <div className='nf-field'>
               <span className='nf-label'>등록일</span>
               <div className='nf-date-group'>
-                <div className='nf-date-wrap'>
-                  <input
-                    className='nf-input nf-input-date'
-                    value={form.regDate}
-                    onChange={e => setForm(prev => ({ ...prev, regDate: e.target.value }))}
-                  />
-                  <span className='nf-date-icon'>
-                    <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'>
-                      <rect x='3' y='4' width='18' height='18' rx='2' ry='2' />
-                      <line x1='16' y1='2' x2='16' y2='6' />
-                      <line x1='8' y1='2' x2='8' y2='6' />
-                      <line x1='3' y1='10' x2='21' y2='10' />
-                    </svg>
-                  </span>
-                </div>
                 <input
+                  type='date'
+                  className='nf-input nf-input-date'
+                  value={form.reg_date}
+                  onChange={e => setForm(prev => ({ ...prev, reg_date: e.target.value }))}
+                />
+                <input
+                  type='time'
                   className='nf-input nf-input-time'
-                  value={form.regTime}
-                  onChange={e => setForm(prev => ({ ...prev, regTime: e.target.value }))}
+                  value={form.reg_time}
+                  onChange={e => setForm(prev => ({ ...prev, reg_time: e.target.value }))}
                 />
               </div>
             </div>
@@ -132,36 +224,29 @@ function NewsAddPage() {
           <div className='nf-row'>
             <div className='nf-field'>
               <span className='nf-label'>클라이언트</span>
-              <select
-                className='nf-select'
-                value={form.client}
-                onChange={e => setForm(prev => ({ ...prev, client: e.target.value }))}
-              >
-                {CLIENT_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+              <select className='nf-select' value={form.client_id} onChange={e => handleClientChange(e.target.value)}>
+                <option value=''>선택하세요</option>
+                {clients.map(c => <option key={c.id} value={String(c.id)}>{c.company_name}</option>)}
               </select>
             </div>
           </div>
 
-          {/* 뉴스매체 */}
+          {/* 뉴스매체 + 기자 */}
           <div className='nf-row'>
             <div className='nf-field nf-field-media'>
               <span className='nf-label'>뉴스매체</span>
-              <select
-                className='nf-select'
-                value={form.media}
-                onChange={e => setForm(prev => ({ ...prev, media: e.target.value }))}
-              >
-                {MEDIA_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+              <select className='nf-select' value={form.media_code} onChange={e => handleMediaChange(e.target.value)}>
+                <option value=''>선택하세요</option>
+                {mediaList.map(m => <option key={m.media_code} value={m.media_code}>{m.media_name}</option>)}
               </select>
-              <button className='btn-dark'>저장</button>
               <select
                 className='nf-select nf-select-journalist'
                 value={form.journalist}
                 onChange={e => setForm(prev => ({ ...prev, journalist: e.target.value }))}
               >
-                {JOURNALIST_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                <option value=''>기자 선택</option>
+                {journalists.map(j => <option key={j.id} value={j.name}>{j.name}</option>)}
               </select>
-              <button className='btn-dark'>저장</button>
             </div>
           </div>
 
@@ -170,17 +255,20 @@ function NewsAddPage() {
             <div className='nf-field nf-field-align-start'>
               <span className='nf-label'>기사분류</span>
               <div className='filter-checkbox-group'>
-                {CATEGORY_OPTIONS.map(cat => (
-                  <label key={cat} className='filter-checkbox-label'>
-                    <input
-                      type='checkbox'
-                      className='filter-checkbox'
-                      checked={form.categories.includes(cat)}
-                      onChange={() => handleCategoryToggle(cat)}
-                    />
-                    {cat}
-                  </label>
-                ))}
+                {categories.length === 0
+                  ? <span style={{ color: '#aaa', fontSize: '1.3rem' }}>클라이언트를 선택하면 분류가 표시됩니다</span>
+                  : categories.map(cat => (
+                    <label key={cat.id} className='filter-checkbox-label'>
+                      <input
+                        type='checkbox'
+                        className='filter-checkbox'
+                        checked={form.categories.includes(cat.name)}
+                        onChange={() => handleCategoryToggle(cat.name)}
+                      />
+                      {cat.name}
+                    </label>
+                  ))
+                }
               </div>
             </div>
           </div>
@@ -189,11 +277,7 @@ function NewsAddPage() {
           <div className='nf-row nf-row-2col'>
             <div className='nf-field'>
               <span className='nf-label'>미디어 Type</span>
-              <select
-                className='nf-select'
-                value={form.mediaType}
-                onChange={e => setForm(prev => ({ ...prev, mediaType: e.target.value }))}
-              >
+              <select className='nf-select' value={form.media_type} onChange={e => setForm(prev => ({ ...prev, media_type: e.target.value }))}>
                 {MEDIA_TYPE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
               </select>
             </div>
@@ -226,11 +310,11 @@ function NewsAddPage() {
                   ref={fileInputRef}
                   type='file'
                   style={{ display: 'none' }}
-                  onChange={handleFileChange}
-                  accept='image/*,.pdf,.doc,.docx'
+                  onChange={e => setFile(e.target.files?.[0] || null)}
+                  accept='image/*,.pdf,.doc,.docx,.xls,.xlsx,.zip'
                 />
-                <button className='btn-dark' onClick={() => fileInputRef.current?.click()}>파일 업로드</button>
-                {form.fileName && <span className='nf-file-name'>{form.fileName}</span>}
+                <button className='btn-dark' type='button' onClick={() => fileInputRef.current?.click()}>파일 업로드</button>
+                {file && <span className='nf-file-name'>{file.name}</span>}
               </div>
             </div>
           </div>

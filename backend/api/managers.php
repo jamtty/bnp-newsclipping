@@ -54,12 +54,31 @@ $method = $_SERVER['REQUEST_METHOD'];
 // ── GET: 목록 조회 ────────────────────────────────────────
 if ($method === 'GET') {
     $company_id = trim($_GET['company_id'] ?? '');
-    if ($company_id === '') {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'company_id 필요']);
+    $id = (int)($_GET['id'] ?? 0);
+
+    if ($id > 0) {
+        // 단건 조회: company_id가 있으면 함께 검사, 없으면 id로만 조회
+        if ($company_id !== '') {
+            $stmt = $pdo->prepare('SELECT m.*, u.company_name FROM `managers` m LEFT JOIN `users` u ON m.company_id = u.company_id WHERE m.id = ? AND m.company_id = ? LIMIT 1');
+            $stmt->execute([$id, $company_id]);
+        } else {
+            $stmt = $pdo->prepare('SELECT m.*, u.company_name FROM `managers` m LEFT JOIN `users` u ON m.company_id = u.company_id WHERE m.id = ? LIMIT 1');
+            $stmt->execute([$id]);
+        }
+        $row = $stmt->fetch();
+        if (!$row) { http_response_code(404); echo json_encode(['success' => false, 'message' => '없음']); exit; }
+        echo json_encode(['success' => true, 'data' => $row]);
         exit;
     }
-    $stmt = $pdo->prepare('SELECT `id`, `manager_id`, `name`, `email`, `phone` FROM `managers` WHERE `company_id` = ? ORDER BY `id` ASC');
+
+    if ($company_id === '') {
+        // 전체 조회
+        $stmt = $pdo->query('SELECT m.`id`, m.`manager_id`, m.`name`, m.`email`, m.`phone`, m.`company_id`, u.`company_name` FROM `managers` m LEFT JOIN `users` u ON m.company_id = u.company_id ORDER BY m.`id` ASC');
+        echo json_encode(['success' => true, 'data' => $stmt->fetchAll()]);
+        exit;
+    }
+
+    $stmt = $pdo->prepare('SELECT m.`id`, m.`manager_id`, m.`name`, m.`email`, m.`phone`, m.`company_id`, u.`company_name` FROM `managers` m LEFT JOIN `users` u ON m.`company_id` = u.`company_id` WHERE m.`company_id` = ? ORDER BY m.`id` ASC');
     $stmt->execute([$company_id]);
     echo json_encode(['success' => true, 'data' => $stmt->fetchAll()]);
     exit;

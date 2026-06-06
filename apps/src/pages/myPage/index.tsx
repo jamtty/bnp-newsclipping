@@ -44,6 +44,7 @@ function MyPage() {
         body: JSON.stringify({
           company_id:  user.company_id,
           user_id:     user.user_id,
+          user_type:   user.user_type,
           current_pw:  pwForm.currentPw,
           new_pw:      pwForm.newPw,
         }),

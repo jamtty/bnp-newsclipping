@@ -32,7 +32,13 @@ function LoginPage() {
       const data = await res.json()
       if (data.success) {
         sessionStorage.setItem('user', JSON.stringify(data.user))
-        navigate('/basic-data/settings')
+        if (data.user.user_type === 'manager') {
+          navigate('/company-info')
+        } else if (data.user.user_type === 'super_admin') {
+          navigate('/company')
+        } else {
+          navigate('/basic-data/settings')
+        }
       } else {
         setError(data.message || '로그인에 실패했습니다')
       }

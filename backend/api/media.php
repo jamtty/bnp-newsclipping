@@ -71,29 +71,58 @@ $method = $_SERVER['REQUEST_METHOD'];
 if ($method === 'GET') {
     $company_id = trim($_GET['company_id'] ?? '');
     $id         = (int)($_GET['id'] ?? 0);
+    $by_code    = isset($_GET['by_code']) && $_GET['by_code'] === '1';
 
-    if ($company_id === '') {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'company_id 필요']);
+    // media_code 기준 기자 목록 조회 (뉴스등록 폼용)
+    if ($by_code && $_GET['id'] !== '' && $company_id !== '') {
+        $media_code = trim($_GET['id']);
+        $jStmt = $pdo->prepare('SELECT `id`,`name` FROM `media_journalists` WHERE `media_code` = ? AND `company_id` = ? ORDER BY `id`');
+        $jStmt->execute([$media_code, $company_id]);
+        echo json_encode(['success' => true, 'data' => ['journalists' => $jStmt->fetchAll()]]);
         exit;
     }
 
     if ($id > 0) {
-        $stmt = $pdo->prepare('SELECT * FROM `media` WHERE `id` = ? AND `company_id` = ? LIMIT 1');
-        $stmt->execute([$id, $company_id]);
+        if ($company_id !== '') {
+            $stmt = $pdo->prepare('SELECT * FROM `media` WHERE `id` = ? AND `company_id` = ? LIMIT 1');
+            $stmt->execute([$id, $company_id]);
+        } else {
+            $stmt = $pdo->prepare('SELECT * FROM `media` WHERE `id` = ? LIMIT 1');
+            $stmt->execute([$id]);
+        }
         $row = $stmt->fetch();
         if (!$row) { http_response_code(404); echo json_encode(['success' => false, 'message' => '없음']); exit; }
 
         $jStmt = $pdo->prepare('SELECT `id`,`name`,`tel`,`email`,`memo` FROM `media_journalists` WHERE `media_code` = ? AND `company_id` = ? ORDER BY `id`');
-        $jStmt->execute([$row['media_code'], $company_id]);
+        $jStmt->execute([$row['media_code'], $row['company_id']]);
         $row['journalists'] = $jStmt->fetchAll();
 
         echo json_encode(['success' => true, 'data' => $row]);
-    } else {
-        $stmt = $pdo->prepare('SELECT `id`,`media_code`,`media_name`,`region`,`tel` FROM `media` WHERE `company_id` = ? ORDER BY `media_code` ASC');
-        $stmt->execute([$company_id]);
-        echo json_encode(['success' => true, 'data' => $stmt->fetchAll()]);
+        exit;
     }
+
+    if ($company_id === '') {
+        $stmt = $pdo->query('
+            SELECT m.`id`,m.`media_code`,m.`media_name`,m.`region`,m.`tel`,m.`company_id`,
+                   u.`company_name` AS `admin_company_name`
+            FROM `media` m
+            LEFT JOIN `users` u ON u.`company_id` = m.`company_id`
+            ORDER BY m.`media_code` ASC
+        ');
+        echo json_encode(['success' => true, 'data' => $stmt->fetchAll()]);
+        exit;
+    }
+
+    $stmt = $pdo->prepare('
+        SELECT m.`id`,m.`media_code`,m.`media_name`,m.`region`,m.`tel`,m.`company_id`,
+               u.`company_name` AS `admin_company_name`
+        FROM `media` m
+        LEFT JOIN `users` u ON u.`company_id` = m.`company_id`
+        WHERE m.`company_id` = ?
+        ORDER BY m.`media_code` ASC
+    ');
+    $stmt->execute([$company_id]);
+    echo json_encode(['success' => true, 'data' => $stmt->fetchAll()]);
     exit;
 }
 

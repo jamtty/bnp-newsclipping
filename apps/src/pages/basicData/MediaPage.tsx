@@ -3,10 +3,12 @@ import { useNavigate } from 'react-router-dom'
 
 interface MediaRow {
   id: number
-  media_code: string
-  media_name: string
-  region:     string
-  tel:        string
+  media_code:          string
+  media_name:          string
+  region:              string
+  tel:                 string
+  company_id?:         string
+  admin_company_name?: string
 }
 
 const PAGE_SIZE = 10
@@ -17,28 +19,50 @@ function MediaPage() {
 
   const [data, setData]               = useState<MediaRow[]>([])
   const [currentPage, setCurrentPage] = useState(1)
+  const [companies, setCompanies]     = useState<{ company_id: string; company_name: string }[]>([])
+  const [selectedCompany, setSelectedCompany] = useState<string>('all')
 
   const fetchList = () => {
-    if (!user.company_id) return
-    fetch(`/api/media.php?company_id=${encodeURIComponent(user.company_id)}`)
-      .then(r => r.json())
-      .then(res => { if (res.success) setData(res.data) })
+    let url = '/api/media.php'
+    if (user.user_type === 'super_admin') {
+      if (selectedCompany && selectedCompany !== 'all') url += `?company_id=${encodeURIComponent(selectedCompany)}`
+    } else {
+      if (!user.company_id) return
+      url += `?company_id=${encodeURIComponent(user.company_id)}`
+    }
+    fetch(url).then(r => r.json()).then(res => { if (res.success) setData(res.data) })
   }
 
-  useEffect(() => { fetchList() }, [])
+  useEffect(() => { fetchList() }, [selectedCompany])
+
+  useEffect(() => {
+    if (user.user_type === 'super_admin') {
+      fetch('/api/companies.php').then(r => r.json()).then(res => { if (res.success) setCompanies(res.data) })
+    }
+  }, [])
 
   const totalPages = Math.max(1, Math.ceil(data.length / PAGE_SIZE))
   const pagedData  = data.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
 
   const handleEdit = (row: MediaRow) => {
-    navigate('/basic-data/media/new', { state: { id: row.id } })
+    navigate('/basic-data/media/new', { state: { id: row.id, company_id: row.company_id } })
   }
 
   const handleDelete = async (id: number) => {
     if (!window.confirm('삭제하시겠습니까?')) return
-    const res  = await fetch(`/api/media.php?id=${id}&company_id=${encodeURIComponent(user.company_id)}`, { method: 'DELETE' })
-    const data = await res.json()
-    if (data.success) fetchList()
+    let url = `/api/media.php?id=${id}`
+    if (user.user_type === 'super_admin') {
+      if (selectedCompany && selectedCompany !== 'all') url += `&company_id=${encodeURIComponent(selectedCompany)}`
+      else {
+        const row = data.find(d => d.id === id)
+        if (row && row.company_id) url += `&company_id=${encodeURIComponent(row.company_id)}`
+      }
+    } else {
+      url += `&company_id=${encodeURIComponent(user.company_id)}`
+    }
+    const res  = await fetch(url, { method: 'DELETE' })
+    const resJson = await res.json()
+    if (resJson.success) fetchList()
   }
 
   return (
@@ -60,6 +84,17 @@ function MediaPage() {
       </div>
 
       <div className='page-toolbar'>
+        {user.user_type === 'super_admin' && (
+          <select
+            className='cf-input company-select'
+            value={selectedCompany}
+            onChange={e => setSelectedCompany(e.target.value)}
+            style={{ marginRight: '8px', minWidth: 220 }}
+          >
+            <option value='all'>전체 담당업체</option>
+            {companies.map(c => <option key={c.company_id} value={c.company_id}>{c.company_name} ({c.company_id})</option>)}
+          </select>
+        )}
         <button className='btn-primary' onClick={() => navigate('/basic-data/media/new')}>신규</button>
       </div>
 
@@ -67,6 +102,7 @@ function MediaPage() {
         <table className='data-table'>
           <thead>
             <tr>
+              {user.user_type === 'super_admin' && <th className='col-admin-company'>담당업체</th>}
               <th>뉴스매체 ID</th>
               <th>매체명</th>
               <th>지역</th>
@@ -76,9 +112,10 @@ function MediaPage() {
           </thead>
           <tbody>
             {pagedData.length === 0 ? (
-              <tr><td colSpan={5} style={{ textAlign: 'center', color: '#aaa' }}>등록된 매체가 없습니다</td></tr>
+              <tr><td colSpan={user.user_type === 'super_admin' ? 6 : 5} style={{ textAlign: 'center', color: '#aaa' }}>등록된 매체가 없습니다</td></tr>
             ) : pagedData.map(row => (
               <tr key={row.id}>
+                {user.user_type === 'super_admin' && <td className='col-admin-company'>{row.admin_company_name ? `${row.admin_company_name} (${row.company_id})` : row.company_id}</td>}
                 <td>{row.media_code}</td>
                 <td>{row.media_name}</td>
                 <td>{row.region}</td>

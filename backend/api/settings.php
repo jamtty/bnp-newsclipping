@@ -36,21 +36,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $company_id = trim($_GET['company_id'] ?? '');
     $user_id    = trim($_GET['user_id']    ?? '');
 
-    if ($company_id === '' || $user_id === '') {
+    if ($company_id === '') {
         http_response_code(400);
         echo json_encode(['success' => false, 'message' => '파라미터가 누락되었습니다']);
         exit;
     }
 
     try {
-        $stmt = $pdo->prepare('
-            SELECT `company_id`, `user_id`, `user_type`, `company_name`,
-                   `main_contact`, `main_manager`, `mobile`, `manager_email`
-            FROM `users`
-            WHERE `company_id` = ? AND `user_id` = ?
-            LIMIT 1
-        ');
-        $stmt->execute([$company_id, $user_id]);
+        if ($user_id !== '') {
+            $stmt = $pdo->prepare('
+                SELECT `company_id`, `user_id`, `user_type`, `company_name`,
+                       `main_contact`, `main_manager`, `mobile`, `manager_email`
+                FROM `users`
+                WHERE `company_id` = ? AND `user_id` = ?
+                LIMIT 1
+            ');
+            $stmt->execute([$company_id, $user_id]);
+        } else {
+            // 담당자: user_id 없이 company_id로 admin 계정 정보 조회
+            $stmt = $pdo->prepare('
+                SELECT `company_id`, `user_id`, `user_type`, `company_name`,
+                       `main_contact`, `main_manager`, `mobile`, `manager_email`
+                FROM `users`
+                WHERE `company_id` = ? AND `user_type` = \'admin\'
+                LIMIT 1
+            ');
+            $stmt->execute([$company_id]);
+        }
         $row = $stmt->fetch();
 
         if (!$row) {

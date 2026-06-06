@@ -6,10 +6,16 @@ function Header() {
   const navigate = useNavigate()
 
   const user = JSON.parse(sessionStorage.getItem('user') || '{}')
-  const roleLabel = user.user_type === 'super_admin' ? '관리자' : '업체'
-  const displayName = user.company_name
-    ? `${user.company_name} (${roleLabel})`
-    : roleLabel
+  const roleLabel =
+    user.user_type === 'super_admin' ? '관리자' :
+    user.user_type === 'manager'     ? '담당자' : '업체'
+
+  const displayName =
+    user.user_type === 'manager'
+      ? `${user.name ?? user.user_id} (${roleLabel})`
+      : user.company_name
+        ? `${user.company_name} (${roleLabel})`
+        : roleLabel
 
   const handleLogout = () => {
     sessionStorage.removeItem('user')

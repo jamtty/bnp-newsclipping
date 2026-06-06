@@ -74,30 +74,52 @@ if ($method === 'GET') {
     $company_id = trim($_GET['company_id'] ?? '');
     $id         = (int)($_GET['id'] ?? 0);
 
-    if ($company_id === '') {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'company_id 필요']);
-        exit;
-    }
-
     if ($id > 0) {
-        // 단건 조회 (수정 화면용)
-        $stmt = $pdo->prepare('SELECT * FROM `clients` WHERE `id` = ? AND `company_id` = ? LIMIT 1');
-        $stmt->execute([$id, $company_id]);
+        // 단건 조회 (company_id 있으면 함께 검사)
+        if ($company_id !== '') {
+            $stmt = $pdo->prepare('SELECT * FROM `clients` WHERE `id` = ? AND `company_id` = ? LIMIT 1');
+            $stmt->execute([$id, $company_id]);
+        } else {
+            $stmt = $pdo->prepare('SELECT * FROM `clients` WHERE `id` = ? LIMIT 1');
+            $stmt->execute([$id]);
+        }
         $row = $stmt->fetch();
         if (!$row) { http_response_code(404); echo json_encode(['success' => false, 'message' => '없음']); exit; }
 
         $cat = $pdo->prepare('SELECT `id`, `name` FROM `client_categories` WHERE `client_code` = ? AND `company_id` = ? ORDER BY `id`');
-        $cat->execute([$row['client_code'], $company_id]);
+        $cat->execute([$row['client_code'], $row['company_id']]);
         $row['categories'] = $cat->fetchAll();
 
         echo json_encode(['success' => true, 'data' => $row]);
-    } else {
-        // 목록
-        $stmt = $pdo->prepare('SELECT `id`,`client_code`,`company_name`,`biz_no`,`tel`,`ceo`,`manager_name`,`manager_tel`,`manager_email` FROM `clients` WHERE `company_id` = ? ORDER BY `client_code` ASC');
-        $stmt->execute([$company_id]);
-        echo json_encode(['success' => true, 'data' => $stmt->fetchAll()]);
+        exit;
     }
+
+    if ($company_id === '') {
+        // 전체 목록 (등록 업체명 포함)
+        $stmt = $pdo->query('
+            SELECT c.`id`,c.`client_code`,c.`company_name`,c.`biz_no`,c.`tel`,c.`ceo`,
+                   c.`manager_name`,c.`manager_tel`,c.`manager_email`,c.`company_id`,
+                   u.`company_name` AS `admin_company_name`
+            FROM `clients` c
+            LEFT JOIN `users` u ON u.`company_id` = c.`company_id`
+            ORDER BY c.`client_code` ASC
+        ');
+        echo json_encode(['success' => true, 'data' => $stmt->fetchAll()]);
+        exit;
+    }
+
+    // 회사별 목록 (등록 업체명 포함)
+    $stmt = $pdo->prepare('
+        SELECT c.`id`,c.`client_code`,c.`company_name`,c.`biz_no`,c.`tel`,c.`ceo`,
+               c.`manager_name`,c.`manager_tel`,c.`manager_email`,c.`company_id`,
+               u.`company_name` AS `admin_company_name`
+        FROM `clients` c
+        LEFT JOIN `users` u ON u.`company_id` = c.`company_id`
+        WHERE c.`company_id` = ?
+        ORDER BY c.`client_code` ASC
+    ');
+    $stmt->execute([$company_id]);
+    echo json_encode(['success' => true, 'data' => $stmt->fetchAll()]);
     exit;
 }
 

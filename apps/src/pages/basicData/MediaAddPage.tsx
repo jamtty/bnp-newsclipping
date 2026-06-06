@@ -23,6 +23,8 @@ function MediaAddPage() {
     tel:        '',
     address:    '',
   })
+  const [companies, setCompanies] = useState<{ company_id: string; company_name: string }[]>([])
+  const [selectedCompany, setSelectedCompany] = useState<string>(user.user_type === 'super_admin' ? '' : user.company_id || '')
   const [journalists, setJournalists]             = useState<JournalistItem[]>([])
   const [showModal, setShowModal]                 = useState(false)
   const [editingJournalist, setEditingJournalist] = useState<JournalistItem | null>(null)
@@ -32,7 +34,8 @@ function MediaAddPage() {
 
   useEffect(() => {
     if (!editId) return
-    fetch(`/api/media.php?company_id=${encodeURIComponent(user.company_id)}&id=${editId}`)
+    const companyParam = user.user_type === 'super_admin' ? '' : `company_id=${encodeURIComponent(user.company_id)}&`
+    fetch(`/api/media.php?${companyParam}id=${editId}`)
       .then(r => r.json())
       .then(res => {
         if (res.success) {
@@ -47,9 +50,16 @@ function MediaAddPage() {
           setJournalists((d.journalists ?? []).map((j: JournalistItem) => ({
             id: j.id, name: j.name, tel: j.tel, email: j.email, memo: j.memo,
           })))
+          if (user.user_type === 'super_admin' && d.company_id) setSelectedCompany(d.company_id)
         }
       })
   }, [editId])
+
+  useEffect(() => {
+    if (user.user_type === 'super_admin') {
+      fetch('/api/companies.php').then(r => r.json()).then(res => { if (res.success) setCompanies(res.data) })
+    }
+  }, [])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm(prev => ({ ...prev, [e.target.name]: e.target.value }))
@@ -88,11 +98,12 @@ function MediaAddPage() {
   }
 
   const handleSave = async () => {
+    if (user.user_type === 'super_admin' && !selectedCompany) { setError('담당업체를 선택하세요'); return }
     if (!form.media_name.trim()) { setError('매체명을 입력하세요'); return }
     setSaving(true); setError('')
     try {
       const body = {
-        company_id: user.company_id,
+        company_id: user.user_type === 'super_admin' ? selectedCompany || user.company_id : user.company_id,
         ...form,
         journalists: journalists.map(j => ({ name: j.name, tel: j.tel, email: j.email, memo: j.memo })),
         ...(editId ? { id: editId } : {}),
@@ -142,6 +153,23 @@ function MediaAddPage() {
 
       <div className='content-card'>
         <div className='client-form'>
+
+          {user.user_type === 'super_admin' && (
+            <div className='cf-row'>
+              <div className='cf-field'>
+                <label className='cf-label'>담당업체 선택 *</label>
+                <select
+                  className='cf-input company-select'
+                  value={selectedCompany}
+                  onChange={e => setSelectedCompany(e.target.value)}
+                  style={{ minWidth: 260 }}
+                >
+                  <option value=''>선택하세요</option>
+                  {companies.map(c => <option key={c.company_id} value={c.company_id}>{c.company_name} ({c.company_id})</option>)}
+                </select>
+              </div>
+            </div>
+          )}
 
           {/* Row 1: 뉴스매체 ID | 매체명 */}
           <div className='cf-row cf-row-2col'>

@@ -25,6 +25,8 @@ function ClientAddPage() {
     address:       '',
     memo:          '',
   })
+  const [companies, setCompanies] = useState<{ company_id: string; company_name: string }[]>([])
+  const [selectedCompany, setSelectedCompany] = useState<string>(user.user_type === 'super_admin' ? '' : user.company_id || '')
   const [categories, setCategories]           = useState<CategoryItem[]>([])
   const [showCategoryModal, setShowCategoryModal] = useState(false)
   const [editingCategory, setEditingCategory] = useState<CategoryItem | null>(null)
@@ -35,7 +37,8 @@ function ClientAddPage() {
   // 수정 모드 – 기존 데이터 로드
   useEffect(() => {
     if (!editId) return
-    fetch(`/api/clients.php?company_id=${encodeURIComponent(user.company_id)}&id=${editId}`)
+    const companyParam = user.user_type === 'super_admin' ? '' : `company_id=${encodeURIComponent(user.company_id)}&`
+    fetch(`/api/clients.php?${companyParam}id=${editId}`)
       .then(r => r.json())
       .then(res => {
         if (res.success) {
@@ -53,9 +56,18 @@ function ClientAddPage() {
             memo:          d.memo          ?? '',
           })
           setCategories((d.categories ?? []).map((c: { id: number; name: string }) => ({ id: c.id, name: c.name })))
+          if (user.user_type === 'super_admin' && d.company_id) setSelectedCompany(d.company_id)
         }
       })
   }, [editId])
+
+  useEffect(() => {
+    if (user.user_type === 'super_admin') {
+      fetch('/api/companies.php')
+        .then(r => r.json())
+        .then(res => { if (res.success) setCompanies(res.data) })
+    }
+  }, [])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setForm(prev => ({ ...prev, [e.target.name]: e.target.value }))
@@ -80,6 +92,7 @@ function ClientAddPage() {
   }
 
   const handleSave = async () => {
+    if (user.user_type === 'super_admin' && !selectedCompany) { setError('담당업체를 선택하세요'); return }
     if (!form.company_name.trim()) { setError('업체명을 입력하세요'); return }
     if (!form.biz_no.trim())       { setError('사업자번호를 입력하세요'); return }
     if (!form.tel.trim())          { setError('대표연락처를 입력하세요'); return }
@@ -88,7 +101,7 @@ function ClientAddPage() {
     setSaving(true); setError('')
     try {
       const body = {
-        company_id: user.company_id,
+        company_id: user.user_type === 'super_admin' ? selectedCompany || user.company_id : user.company_id,
         ...form,
         categories: categories.map(c => ({ name: c.name })),
         ...(editId ? { id: editId } : {}),
@@ -138,6 +151,23 @@ function ClientAddPage() {
 
       <div className='content-card'>
         <div className='client-form'>
+
+          {user.user_type === 'super_admin' && (
+            <div className='cf-row'>
+              <div className='cf-field'>
+                <label className='cf-label'>담당업체 선택 *</label>
+                <select
+                  className='cf-input company-select'
+                  value={selectedCompany}
+                  onChange={e => setSelectedCompany(e.target.value)}
+                  style={{ minWidth: 260 }}
+                >
+                  <option value=''>선택하세요</option>
+                  {companies.map(c => <option key={c.company_id} value={c.company_id}>{c.company_name} ({c.company_id})</option>)}
+                </select>
+              </div>
+            </div>
+          )}
 
           {/* Row 1: 업체코드 | 업체명 */}
           <div className='cf-row cf-row-2col'>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Modal from '../../components/common/Modal'
 
 interface EditData {
@@ -27,6 +27,8 @@ function ManagerAddModal({ onClose, onSaved, editData }: ManagerAddModalProps) {
     email:           editData?.email      ?? '',
     phone:           editData?.phone      ?? '',
   })
+  const [companies, setCompanies] = useState<{ company_id: string; company_name: string }[]>([])
+  const [selectedCompany, setSelectedCompany] = useState<string>(user.user_type === 'super_admin' ? '' : user.company_id || '')
   const [error, setError]   = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -38,7 +40,19 @@ function ManagerAddModal({ onClose, onSaved, editData }: ManagerAddModalProps) {
     setError('')
   }
 
+  useEffect(() => {
+    if (user.user_type === 'super_admin') {
+      fetch('/api/companies.php')
+        .then(r => r.json())
+        .then(res => { if (res.success) setCompanies(res.data) })
+    }
+    if (isEdit && (editData as any)?.company_id) {
+      setSelectedCompany((editData as any).company_id)
+    }
+  }, [])
+
   const handleSave = async () => {
+    if (user.user_type === 'super_admin' && !selectedCompany) { setError('담당업체를 선택하세요'); return }
     if (!form.manager_id)  { setError('담당자 ID는 필수입니다'); return }
     if (!form.name)        { setError('이름은 필수입니다'); return }
     if (!isEdit && !form.password) { setError('비밀번호를 입력하세요'); return }
@@ -48,7 +62,7 @@ function ManagerAddModal({ onClose, onSaved, editData }: ManagerAddModalProps) {
     setSaving(true)
     try {
       const body: Record<string, string | number> = {
-        company_id: user.company_id,
+        company_id: user.user_type === 'super_admin' ? selectedCompany || user.company_id : user.company_id,
         manager_id: form.manager_id,
         name:       form.name,
         email:      form.email,
@@ -77,6 +91,22 @@ function ManagerAddModal({ onClose, onSaved, editData }: ManagerAddModalProps) {
   return (
     <Modal title={isEdit ? '항목 수정' : '신규항목 추가'} onClose={onClose}>
       <div className='modal-form'>
+        {user.user_type === 'super_admin' && (
+          <div className='modal-field'>
+            <label className='modal-label'>담당업체 *</label>
+            <select
+              className='modal-input company-select'
+              value={selectedCompany}
+              onChange={e => setSelectedCompany(e.target.value)}
+              style={{ minWidth: 260 }}
+            >
+              <option value=''>선택하세요</option>
+              {companies.map(c => (
+                <option key={c.company_id} value={c.company_id}>{c.company_name} ({c.company_id})</option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className='modal-field'>
           <label className='modal-label'>담당자 ID *</label>
           <input className='modal-input' name='manager_id' autoComplete='off'
