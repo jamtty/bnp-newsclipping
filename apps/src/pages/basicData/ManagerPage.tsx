@@ -50,7 +50,7 @@ function ManagerPage() {
   return (
     <div className='page'>
       <div className='page-header'>
-        <h2 className='page-title'>자사담당자 관리</h2>
+        <h2 className='page-title'>담당자 관리</h2>
         <nav className='breadcrumb'>
           <span className='breadcrumb-item'>
             <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'>
@@ -61,7 +61,7 @@ function ManagerPage() {
           <span className='breadcrumb-sep'>›</span>
           <span className='breadcrumb-item'>기초자료</span>
           <span className='breadcrumb-sep'>›</span>
-          <span className='breadcrumb-item active'>자사담당자 관리</span>
+          <span className='breadcrumb-item active'>담당자 관리</span>
         </nav>
       </div>
       <div className='page-toolbar'>
