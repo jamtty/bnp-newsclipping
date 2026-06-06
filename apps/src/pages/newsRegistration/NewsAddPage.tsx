@@ -5,6 +5,7 @@ interface ClientOption { id: number; client_code: string; company_name: string }
 interface MediaOption  { media_code: string; media_name: string }
 interface JournalistOption { id: number; name: string }
 interface CategoryOption { id: number; name: string }
+interface CompanyOption { company_id: string; company_name: string }
 
 const MEDIA_TYPE_OPTIONS = ['온라인', '지면', '통신사']
 
@@ -21,6 +22,13 @@ function NewsAddPage() {
   const [mediaList,   setMediaList]   = useState<MediaOption[]>([])
   const [journalists, setJournalists] = useState<JournalistOption[]>([])
   const [categories,  setCategories]  = useState<CategoryOption[]>([])
+  const [companies,   setCompanies]   = useState<CompanyOption[]>([])
+
+  // super_admin: 선택된 담당업체 (수정 시 editData.company_id 사용)
+  const [selectedCompanyId, setSelectedCompanyId] = useState(
+    editData?.company_id || (user.user_type === 'super_admin' ? '' : companyId)
+  )
+  const activeCompanyId = user.user_type === 'super_admin' ? selectedCompanyId : companyId
 
   const [form, setForm] = useState({
     serial:       '',
@@ -38,19 +46,35 @@ function NewsAddPage() {
     link:         '',
   })
   const [file,    setFile]    = useState<File | null>(null)
+  const [existingFile, setExistingFile] = useState<{ name: string; path: string } | null>(null)
   const [saving,  setSaving]  = useState(false)
   const [error,   setError]   = useState('')
 
   useEffect(() => {
-    fetch(`/api/clients.php?company_id=${encodeURIComponent(companyId)}`)
-      .then(r => r.json()).then(res => { if (res.success) setClients(res.data) })
-    fetch(`/api/media.php?company_id=${encodeURIComponent(companyId)}`)
-      .then(r => r.json()).then(res => { if (res.success) setMediaList(res.data) })
+    if (user.user_type === 'super_admin') {
+      fetch('/api/companies.php')
+        .then(r => r.json())
+        .then(res => { if (res.success) setCompanies(res.data) })
+    }
   }, [])
 
   useEffect(() => {
+    if (!activeCompanyId) { setClients([]); setMediaList([]); return }
+    fetch(`/api/clients.php?company_id=${encodeURIComponent(activeCompanyId)}`)
+      .then(r => r.json()).then(res => { if (res.success) setClients(res.data) })
+    fetch(`/api/media.php?company_id=${encodeURIComponent(activeCompanyId)}`)
+      .then(r => r.json()).then(res => { if (res.success) setMediaList(res.data) })
+    // 업체가 바뀌면 클라이언트/매체 초기화 (신규 등록일 때만)
+    if (!isEdit) {
+      setForm(prev => ({ ...prev, client_id: '', client_name: '', media_code: '', media_name: '', journalist: '', categories: [] }))
+      setCategories([])
+      setJournalists([])
+    }
+  }, [activeCompanyId])
+
+  useEffect(() => {
     if (!form.media_code) { setJournalists([]); return }
-    fetch(`/api/media.php?company_id=${encodeURIComponent(companyId)}&id=${encodeURIComponent(form.media_code)}&by_code=1`)
+    fetch(`/api/media.php?company_id=${encodeURIComponent(activeCompanyId)}&id=${encodeURIComponent(form.media_code)}&by_code=1`)
       .then(r => r.json())
       .then(res => {
         if (res.success && res.data?.journalists) setJournalists(res.data.journalists)
@@ -60,7 +84,7 @@ function NewsAddPage() {
 
   useEffect(() => {
     if (!form.client_id) { setCategories([]); return }
-    fetch(`/api/clients.php?company_id=${encodeURIComponent(companyId)}&id=${form.client_id}`)
+    fetch(`/api/clients.php?company_id=${encodeURIComponent(activeCompanyId)}&id=${form.client_id}`)
       .then(r => r.json())
       .then(res => {
         if (res.success && res.data?.categories) setCategories(res.data.categories)
@@ -91,6 +115,9 @@ function NewsAddPage() {
           headline:    d.headline    || '',
           link:        d.link        || '',
         })
+        if (d.file_name && d.file_path) {
+          setExistingFile({ name: d.file_name, path: d.file_path })
+        }
       })
   }, [])
 
@@ -116,6 +143,7 @@ function NewsAddPage() {
   }
 
   const handleSave = async () => {
+    if (user.user_type === 'super_admin' && !selectedCompanyId) { setError('담당업체를 선택하세요'); return }
     if (!form.client_id)       { setError('클라이언트를 선택하세요'); return }
     if (!form.media_code)      { setError('뉴스매체를 선택하세요'); return }
     if (!form.headline.trim()) { setError('기사 Head line을 입력하세요'); return }
@@ -123,7 +151,7 @@ function NewsAddPage() {
     setSaving(true); setError('')
     try {
       const fd = new FormData()
-      fd.append('company_id',  companyId)
+      fd.append('company_id',  activeCompanyId)
       fd.append('manager',     form.manager)
       fd.append('reg_date',    form.reg_date)
       fd.append('reg_time',    form.reg_time)
@@ -137,6 +165,7 @@ function NewsAddPage() {
       fd.append('headline',    form.headline)
       fd.append('link',        form.link)
       if (file) fd.append('file', file)
+      else if (existingFile) { fd.append('file_name_saved', existingFile.name); fd.append('file_path_saved', existingFile.path) }
       if (isEdit) fd.append('id', String(editData.id))
 
       const res  = await fetch('/api/news.php', { method: isEdit ? 'PUT' : 'POST', body: fd })
@@ -179,6 +208,25 @@ function NewsAddPage() {
       <div className='content-card'>
         <div className='news-form'>
 
+          {/* 담당업체 (super_admin만 표시) */}
+          {user.user_type === 'super_admin' && (
+            <div className='nf-row'>
+              <div className='nf-field'>
+                <span className='nf-label'>담당업체 <span style={{ color: '#e53e3e' }}>*</span></span>
+                <select
+                  className={`nf-select${!selectedCompanyId ? ' input-error' : ''}`}
+                  value={selectedCompanyId}
+                  onChange={e => setSelectedCompanyId(e.target.value)}
+                >
+                  <option value=''>선택하세요</option>
+                  {companies.map(c => (
+                    <option key={c.company_id} value={c.company_id}>{c.company_name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
           {/* SERIAL */}
           <div className='nf-row'>
             <div className='nf-field'>
@@ -211,10 +259,11 @@ function NewsAddPage() {
                   onChange={e => setForm(prev => ({ ...prev, reg_date: e.target.value }))}
                 />
                 <input
-                  type='time'
+                  type='text'
                   className='nf-input nf-input-time'
                   value={form.reg_time}
                   onChange={e => setForm(prev => ({ ...prev, reg_time: e.target.value }))}
+                  placeholder='HH:MM'
                 />
               </div>
             </div>
@@ -273,14 +322,18 @@ function NewsAddPage() {
             </div>
           </div>
 
-          {/* 미디어 Type + 기사 Headline */}
-          <div className='nf-row nf-row-2col'>
+          {/* 미디어 Type */}
+          <div className='nf-row'>
             <div className='nf-field'>
               <span className='nf-label'>미디어 Type</span>
               <select className='nf-select' value={form.media_type} onChange={e => setForm(prev => ({ ...prev, media_type: e.target.value }))}>
                 {MEDIA_TYPE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
               </select>
             </div>
+          </div>
+
+          {/* 기사 Headline */}
+          <div className='nf-row'>
             <div className='nf-field'>
               <span className='nf-label'>기사 Head line</span>
               <input
@@ -292,8 +345,8 @@ function NewsAddPage() {
             </div>
           </div>
 
-          {/* 기사 Link + 관련 문서/이미지 */}
-          <div className='nf-row nf-row-2col'>
+          {/* 기사 Link */}
+          <div className='nf-row'>
             <div className='nf-field'>
               <span className='nf-label'>기사 Link</span>
               <input
@@ -303,6 +356,10 @@ function NewsAddPage() {
                 placeholder='https://'
               />
             </div>
+          </div>
+
+          {/* 관련 문서/이미지 */}
+          <div className='nf-row'>
             <div className='nf-field'>
               <span className='nf-label'>관련 문서/이미지</span>
               <div className='nf-file-group'>
@@ -310,11 +367,29 @@ function NewsAddPage() {
                   ref={fileInputRef}
                   type='file'
                   style={{ display: 'none' }}
-                  onChange={e => setFile(e.target.files?.[0] || null)}
+                  onChange={e => { setFile(e.target.files?.[0] || null); setExistingFile(null) }}
                   accept='image/*,.pdf,.doc,.docx,.xls,.xlsx,.zip'
                 />
                 <button className='btn-dark' type='button' onClick={() => fileInputRef.current?.click()}>파일 업로드</button>
-                {file && <span className='nf-file-name'>{file.name}</span>}
+                {file
+                  ? <span className='nf-file-name'>{file.name}</span>
+                  : existingFile && (
+                    <div style={{ marginTop: '0.8rem' }}>
+                      {/\.(jpg|jpeg|png|gif|webp)$/i.test(existingFile.name) && (
+                        <img
+                          src={existingFile.path}
+                          alt={existingFile.name}
+                          style={{ display: 'block', width: '450px', maxWidth: '100%', borderRadius: '4px' }}
+                          onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                        />
+                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginTop: '0.4rem' }}>
+                        <span className='nf-file-name'>{existingFile.name}</span>
+                        <button type='button' style={{ fontSize: '1.1rem', color: '#e53e3e', background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => setExistingFile(null)}>✕</button>
+                      </div>
+                    </div>
+                  )
+                }
               </div>
             </div>
           </div>

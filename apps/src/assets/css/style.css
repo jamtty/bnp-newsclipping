@@ -46,7 +46,6 @@
 
 .filter-input-date {
   min-width: 9rem;
-  width: 9rem;
 }
 
 .filter-date-range {
@@ -208,7 +207,7 @@
 }
 
 .nf-input-date {
-  width: 10rem;
+  min-width: 10rem;
   flex: none;
 }
 

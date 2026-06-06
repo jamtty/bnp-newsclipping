@@ -15,9 +15,11 @@ interface FetchedItem {
   _checked?: boolean
 }
 
-function NaverFetchModal({ onClose, onImport }: {
+function NaverFetchModal({ onClose, onImport, companies, isSuperAdmin }: {
   onClose: () => void
-  onImport: (items: FetchedItem[]) => void
+  onImport: (items: FetchedItem[], targetCompanyId: string) => void
+  companies: { company_id: string; company_name: string }[]
+  isSuperAdmin: boolean
 }) {
   const [query,   setQuery]   = useState('')
   const [sort,    setSort]    = useState<'date'|'sim'>('date')
@@ -26,6 +28,7 @@ function NaverFetchModal({ onClose, onImport }: {
   const [error,   setError]   = useState('')
   const [start,   setStart]   = useState(1)
   const [total,   setTotal]   = useState(0)
+  const [targetCompanyId, setTargetCompanyId] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { inputRef.current?.focus() }, [])
@@ -62,6 +65,23 @@ function NaverFetchModal({ onClose, onImport }: {
   return (
     <Modal title='네이버 뉴스 가져오기' onClose={onClose}>
       <div className='modal-form'>
+
+        {/* 담당업체 (super_admin만) */}
+        {isSuperAdmin && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '0.4rem' }}>
+            <span style={{ fontSize: '1.4rem', color: '#555', whiteSpace: 'nowrap', width: '8rem', flexShrink: 0 }}>담당업체 <span style={{ color: '#e53e3e' }}>*</span></span>
+            <select
+              className={`modal-input${isSuperAdmin && !targetCompanyId ? ' input-error' : ''}`}
+              value={targetCompanyId}
+              onChange={e => setTargetCompanyId(e.target.value)}
+            >
+              <option value=''>선택하세요</option>
+              {companies.map(c => (
+                <option key={c.company_id} value={c.company_id}>{c.company_name}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* 검색 바 */}
         <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}>
@@ -164,8 +184,8 @@ function NaverFetchModal({ onClose, onImport }: {
         <button className='btn-secondary' onClick={onClose}>닫기</button>
         <button
           className='btn-primary'
-          disabled={checkedItems.length === 0}
-          onClick={() => { onImport(checkedItems); onClose() }}
+          disabled={checkedItems.length === 0 || (isSuperAdmin && !targetCompanyId)}
+          onClick={() => { onImport(checkedItems, targetCompanyId); onClose() }}
         >
           선택 가져오기 ({checkedItems.length})
         </button>
@@ -180,7 +200,10 @@ interface NewsRow {
   manager: string
   reg_date: string
   reg_time: string | null
+  company_id: string | null
+  client_id: number | null
   client_name: string | null
+  media_code: string | null
   categories: string | null
   media_type: string | null
   headline: string | null
@@ -193,6 +216,7 @@ interface ClientOption {
   id: number
   client_code: string
   company_name: string
+  company_id: string
 }
 
 const MEDIA_TYPE_OPTIONS = ['전체', '온라인', '지면', '통신사']
@@ -209,6 +233,7 @@ function NewsRegistrationPage() {
 
   const [clients,       setClients]       = useState<ClientOption[]>([])
   const [allCategories, setAllCategories] = useState<string[]>([])
+  const [companies,     setCompanies]     = useState<{ company_id: string; company_name: string }[]>([])
 
   // 체크박스 다중선택
   const [checkedIds, setCheckedIds] = useState<Set<number>>(new Set())
@@ -221,24 +246,49 @@ function NewsRegistrationPage() {
   const [showFetchModal, setShowFetchModal] = useState(false)
 
   // 필터 상태
+  const [companyFilter,   setCompanyFilter]   = useState('')
   const [clientFilterId,  setClientFilterId]  = useState('')
   const [dateFrom,        setDateFrom]        = useState('')
   const [dateTo,          setDateTo]          = useState('')
   const [categoryFilter,  setCategoryFilter]  = useState<string[]>([])
   const [mediaTypeFilter, setMediaTypeFilter] = useState('전체')
 
-  // 클라이언트 목록 로드
+  // 클라이언트 목록 로드 (super_admin은 전체, 그 외 company_id 기준)
   useEffect(() => {
-    fetch(`${API}/clients.php?company_id=${encodeURIComponent(companyId)}`)
+    const url = user.user_type === 'super_admin'
+      ? `${API}/clients.php`
+      : `${API}/clients.php?company_id=${encodeURIComponent(companyId)}`
+    fetch(url)
       .then(r => r.json())
       .then(res => { if (res.success) setClients(res.data) })
+    if (user.user_type === 'super_admin') {
+      fetch(`${API}/companies.php`)
+        .then(r => r.json())
+        .then(res => { if (res.success) setCompanies(res.data) })
+    }
   }, [])
+
+  // 담당업체 변경 시 클라이언트 필터 초기화
+  const handleCompanyFilter = (cid: string) => {
+    setCompanyFilter(cid)
+    setClientFilterId('')
+    setCategoryFilter([])
+    setAllCategories([])
+  }
+
+  // 담당업체 필터 기준으로 클라이언트 목록 필터링
+  const filteredClients = companyFilter
+    ? clients.filter(c => c.company_id === companyFilter)
+    : clients
 
   // 클라이언트 선택 시 해당 기사분류 로드
   useEffect(() => {
     setCategoryFilter([])
     if (!clientFilterId) { setAllCategories([]); return }
-    fetch(`${API}/clients.php?company_id=${encodeURIComponent(companyId)}&id=${clientFilterId}`)
+    // 선택된 클라이언트의 실제 company_id 사용 (super_admin은 다른 업체 클라이언트일 수 있음)
+    const selectedClient = clients.find(cl => String(cl.id) === clientFilterId)
+    const cid = (selectedClient as any)?.company_id || companyId
+    fetch(`${API}/clients.php?company_id=${encodeURIComponent(cid)}&id=${clientFilterId}`)
       .then(r => r.json())
       .then(res => {
         if (res.success && res.data?.categories) {
@@ -247,14 +297,18 @@ function NewsRegistrationPage() {
           setAllCategories([])
         }
       })
-  }, [clientFilterId])
+  }, [clientFilterId, clients])
 
-  // 뉴스 목록 로드
+  // 뉴스 목록 로드 (super_admin은 전체, 그 외 company_id 기준)
   const loadNews = () => {
     setLoading(true)
-    fetch(`${API}/news.php?company_id=${encodeURIComponent(companyId)}`)
-      .then(r => r.json())
+    const url = user.user_type === 'super_admin'
+      ? `${API}/news.php`
+      : `${API}/news.php?company_id=${encodeURIComponent(companyId)}`
+    fetch(url)
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json() })
       .then(res => { if (res.success) setData(res.data) })
+      .catch(err => console.error('뉴스 목록 로드 실패:', err))
       .finally(() => setLoading(false))
   }
 
@@ -263,10 +317,8 @@ function NewsRegistrationPage() {
   // 필터 적용
   const applyFilters = (rows: NewsRow[]) => {
     let result = [...rows]
-    if (clientFilterId) {
-      const c = clients.find(cl => String(cl.id) === clientFilterId)
-      if (c) result = result.filter(r => r.client_name === c.company_name)
-    }
+    if (companyFilter)   result = result.filter(r => r.company_id === companyFilter)
+    if (clientFilterId)  result = result.filter(r => r.client_id === Number(clientFilterId))
     if (dateFrom)                  result = result.filter(r => (r.reg_date ?? '') >= dateFrom)
     if (dateTo)                    result = result.filter(r => (r.reg_date ?? '') <= dateTo)
     if (categoryFilter.length > 0) {
@@ -290,9 +342,14 @@ function NewsRegistrationPage() {
     )
   }
 
+  const deleteUrl = (id: number) =>
+    user.user_type === 'super_admin'
+      ? `${API}/news.php?id=${id}`
+      : `${API}/news.php?id=${id}&company_id=${encodeURIComponent(companyId)}`
+
   const handleDelete = (id: number) => {
     if (!window.confirm('삭제하시겠습니까?')) return
-    fetch(`${API}/news.php?id=${id}&company_id=${encodeURIComponent(companyId)}`, { method: 'DELETE' })
+    fetch(deleteUrl(id), { method: 'DELETE' })
       .then(r => r.json())
       .then(res => {
         if (res.success) { setCheckedIds(new Set()); loadNews() }
@@ -304,24 +361,41 @@ function NewsRegistrationPage() {
     if (checkedIds.size === 0) return
     if (!window.confirm(`선택한 ${checkedIds.size}건을 삭제하시겠습니까?`)) return
     for (const id of Array.from(checkedIds)) {
-      await fetch(`${API}/news.php?id=${id}&company_id=${encodeURIComponent(companyId)}`, { method: 'DELETE' })
+      await fetch(deleteUrl(id), { method: 'DELETE' })
     }
     setCheckedIds(new Set())
     loadNews()
   }
 
   // 네이버에서 선택한 뉴스 일괄 등록
-  const handleImport = async (items: FetchedItem[]) => {
+  const handleImport = async (items: FetchedItem[], targetCompanyId: string) => {
+    const cid = user.user_type === 'super_admin' ? targetCompanyId : companyId
     let successCount = 0
     for (const item of items) {
       const fd = new FormData()
-      fd.append('company_id', companyId)
+      const pubDate = item.pub_date ? new Date(item.pub_date) : new Date()
+      fd.append('company_id', cid)
       fd.append('manager',    user.name || user.user_id || '')
-      fd.append('reg_date',   item.pub_date ? new Date(item.pub_date).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10))
+      fd.append('reg_date',   pubDate.toISOString().slice(0, 10))
+      fd.append('reg_time',   pubDate.toTimeString().slice(0, 5))
       fd.append('media_name', item.source)
       fd.append('headline',   item.title)
       fd.append('link',       item.link)
       fd.append('media_type', '온라인')
+
+      // 대표이미지 자동 가져오기
+      if (item.link) {
+        try {
+          const imgRes = await fetch(`${API}/news-image.php?url=${encodeURIComponent(item.link)}`).then(r => r.json())
+          if (imgRes.success && imgRes.file_name) {
+            fd.append('file_name_saved', imgRes.file_name)
+            fd.append('file_path_saved', imgRes.file_path)
+          }
+        } catch {
+          // 이미지 실패 시 무시하고 계속 등록
+        }
+      }
+
       const res = await fetch(`${API}/news.php`, { method: 'POST', body: fd }).then(r => r.json())
       if (res.success) successCount++
     }
@@ -369,15 +443,33 @@ function NewsRegistrationPage() {
       <div className='content-card'>
         <div className='filter-grid'>
           <div className='filter-row'>
+            {user.user_type === 'super_admin' && (
+              <div className='filter-field'>
+                <span className='filter-label'>담당업체</span>
+                <select
+                  className='filter-select'
+                  value={companyFilter}
+                  onChange={e => handleCompanyFilter(e.target.value)}
+                >
+                  <option value=''>전체</option>
+                  {companies.map(c => (
+                    <option key={c.company_id} value={c.company_id}>{c.company_name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className='filter-field'>
               <span className='filter-label'>클라이언트</span>
               <select
                 className='filter-select'
                 value={clientFilterId}
                 onChange={e => setClientFilterId(e.target.value)}
+                disabled={user.user_type === 'super_admin' && !companyFilter}
               >
-                <option value=''>전체</option>
-                {clients.map(c => (
+                <option value=''>
+                  {user.user_type === 'super_admin' && !companyFilter ? '담당업체를 먼저 선택하세요' : '전체'}
+                </option>
+                {filteredClients.map(c => (
                   <option key={c.id} value={String(c.id)}>{c.company_name}</option>
                 ))}
               </select>
@@ -437,6 +529,17 @@ function NewsRegistrationPage() {
             </div>
             <div className='filter-actions'>
               <button className='btn-secondary' onClick={handleSearch}>조회</button>
+              <button className='btn-secondary' onClick={() => {
+                setCompanyFilter('')
+                setClientFilterId('')
+                setDateFrom('')
+                setDateTo('')
+                setCategoryFilter([])
+                setMediaTypeFilter('전체')
+                setAllCategories([])
+                setFiltered(data)
+                setCurrentPage(1)
+              }}>초기화</button>
             </div>
           </div>
         </div>
@@ -461,6 +564,8 @@ function NewsRegistrationPage() {
         <NaverFetchModal
           onClose={() => setShowFetchModal(false)}
           onImport={handleImport}
+          companies={companies}
+          isSuperAdmin={user.user_type === 'super_admin'}
         />
       )}
 
@@ -519,7 +624,7 @@ function NewsRegistrationPage() {
                     <button
                       className='btn-icon'
                       title='편집'
-                      onClick={() => navigate('/news-registration/edit', { state: { id: row.id, company_id: companyId } })}
+                      onClick={() => navigate('/news-registration/edit', { state: { id: row.id, company_id: row.company_id ?? companyId } })}
                     >
                       <svg width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'>
                         <path d='M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7' />

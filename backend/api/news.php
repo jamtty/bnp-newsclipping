@@ -90,6 +90,13 @@ if ($method === 'GET') {
 
 // ── 공통 파일 업로드 헬퍼 ──────────────────────────────────
 function handleUpload(): array {
+    // 이미 서버에 저장된 경로가 전달된 경우 (news-image.php 로 미리 저장)
+    $savedName = trim($_POST['file_name_saved'] ?? '');
+    $savedPath = trim($_POST['file_path_saved'] ?? '');
+    if ($savedName !== '' && $savedPath !== '') {
+        return ['name' => $savedName, 'path' => $savedPath];
+    }
+
     if (empty($_FILES['file']['tmp_name'])) return ['name' => null, 'path' => null];
 
     $uploadDir = dirname(__DIR__) . '/uploads/news/';
@@ -204,18 +211,27 @@ if ($method === 'PUT') {
 if ($method === 'DELETE') {
     $id         = (int)($_GET['id']         ?? 0);
     $company_id = trim($_GET['company_id']  ?? '');
-    if (!$id || $company_id === '') { http_response_code(400); echo json_encode(['success' => false, 'message' => 'id, company_id 필요']); exit; }
+    if (!$id) { http_response_code(400); echo json_encode(['success' => false, 'message' => 'id 필요']); exit; }
 
     // 첨부파일 삭제
-    $q = $pdo->prepare('SELECT `file_path` FROM `news` WHERE `id`=? AND `company_id`=? LIMIT 1');
-    $q->execute([$id, $company_id]);
+    if ($company_id !== '') {
+        $q = $pdo->prepare('SELECT `file_path` FROM `news` WHERE `id`=? AND `company_id`=? LIMIT 1');
+        $q->execute([$id, $company_id]);
+    } else {
+        $q = $pdo->prepare('SELECT `file_path` FROM `news` WHERE `id`=? LIMIT 1');
+        $q->execute([$id]);
+    }
     $row = $q->fetch();
     if ($row && $row['file_path']) {
         $full = dirname(__DIR__) . $row['file_path'];
         if (file_exists($full)) unlink($full);
     }
 
-    $pdo->prepare('DELETE FROM `news` WHERE `id`=? AND `company_id`=?')->execute([$id, $company_id]);
+    if ($company_id !== '') {
+        $pdo->prepare('DELETE FROM `news` WHERE `id`=? AND `company_id`=?')->execute([$id, $company_id]);
+    } else {
+        $pdo->prepare('DELETE FROM `news` WHERE `id`=?')->execute([$id]);
+    }
     echo json_encode(['success' => true]);
     exit;
 }

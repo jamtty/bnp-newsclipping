@@ -15,6 +15,11 @@ export default defineConfig({
         secure: true,
         rewrite: (path: string) => path.replace(/^\/api/, '/backend/api'),
       },
+      '/backend/uploads': {
+        target: 'https://newsclipping.mycafe24.com',
+        changeOrigin: true,
+        secure: true,
+      },
     },
   },
 })
