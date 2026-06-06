@@ -26,9 +26,9 @@ const menus = [
         <rect x='3' y='14' width='7' height='7' /><rect x='14' y='14' width='7' height='7' />
       </svg>
     ),
-    children: [
+      children: [
       { label: '환경설정', path: '/basic-data/settings' },
-      { label: '자사 담당자 관리', path: '/basic-data/manager' },
+      { label: '담당자 관리', path: '/basic-data/manager' },
       { label: '클라이언트 관리', path: '/basic-data/client' },
       { label: '뉴스매체', path: '/basic-data/media' },
     ],
