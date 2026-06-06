@@ -68,38 +68,37 @@ $url = 'https://openapi.naver.com/v1/search/news.json?' . http_build_query([
     'sort'    => $sort,
 ]);
 
-$ctx = stream_context_create([
-    'http' => [
-        'method'  => 'GET',
-        'header'  => implode("\r\n", [
-            'X-Naver-Client-Id: '     . NAVER_CLIENT_ID,
-            'X-Naver-Client-Secret: ' . NAVER_CLIENT_SECRET,
-        ]),
-        'timeout' => 10,
-        'ignore_errors' => true,
-    ],
-]);
-
-$body = @file_get_contents($url, false, $ctx);
-
-if ($body === false) {
-    http_response_code(502);
-    echo json_encode(['success' => false, 'message' => '네이버 API 호출에 실패했습니다.']);
+if (!function_exists('curl_init')) {
+    http_response_code(503);
+    echo json_encode(['success' => false, 'message' => '서버에 cURL이 설치되어 있지 않습니다.']);
     exit;
 }
 
-// HTTP 상태 코드 확인
-$httpStatus = 200;
-foreach ($http_response_header as $h) {
-    if (preg_match('/HTTP\/\d\.\d\s+(\d+)/', $h, $m)) {
-        $httpStatus = (int)$m[1];
-    }
+$ch = curl_init($url);
+curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_TIMEOUT        => 10,
+    CURLOPT_SSL_VERIFYPEER => true,
+    CURLOPT_HTTPHEADER     => [
+        'X-Naver-Client-Id: '     . NAVER_CLIENT_ID,
+        'X-Naver-Client-Secret: ' . NAVER_CLIENT_SECRET,
+    ],
+]);
+$body       = curl_exec($ch);
+$httpStatus = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$curlError  = curl_error($ch);
+curl_close($ch);
+
+if ($body === false || $curlError) {
+    http_response_code(502);
+    echo json_encode(['success' => false, 'message' => '네이버 API 호출에 실패했습니다. (' . $curlError . ')']);
+    exit;
 }
 
 if ($httpStatus !== 200) {
     http_response_code($httpStatus);
     $err = json_decode($body, true);
-    echo json_encode(['success' => false, 'message' => $err['errorMessage'] ?? '네이버 API 오류']);
+    echo json_encode(['success' => false, 'message' => $err['errorMessage'] ?? '네이버 API 오류 (HTTP ' . $httpStatus . ')']);
     exit;
 }
 

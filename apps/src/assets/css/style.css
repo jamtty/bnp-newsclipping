@@ -338,6 +338,23 @@
   border-color: #BDBDBD;
 }
 
+.btn-danger {
+  height: 3.6rem;
+  padding: 0 2rem;
+  background: #E53E3E;
+  color: #fff;
+  font-size: 1.4rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 0.8rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.btn-danger:hover {
+  background: #C53030;
+}
+
 .btn-icon {
   background: none;
   border: none;
