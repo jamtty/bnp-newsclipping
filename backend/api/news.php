@@ -54,6 +54,7 @@ $pdo->exec("
       `link`         VARCHAR(1000) DEFAULT NULL              COMMENT '기사 Link',
       `file_name`    VARCHAR(255)  DEFAULT NULL              COMMENT '첨부파일명',
       `file_path`    VARCHAR(500)  DEFAULT NULL              COMMENT '첨부파일 경로',
+      `manager_user_id` VARCHAR(100) DEFAULT NULL            COMMENT '등록자 user_id',
       `created_at`   TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (`id`),
       KEY `idx_company` (`company_id`)
@@ -61,6 +62,11 @@ $pdo->exec("
 ");
 
 $method = $_SERVER['REQUEST_METHOD'];
+
+// manager_user_id 컬럼 없으면 추가 (구버전 DB 대응)
+try {
+    $pdo->exec("ALTER TABLE `news` ADD COLUMN `manager_user_id` VARCHAR(100) DEFAULT NULL COMMENT '등록자 user_id' AFTER `file_path`");
+} catch (Exception $e) { /* 이미 있으면 무시 */ }
 
 // ── GET ──────────────────────────────────────────────────
 if ($method === 'GET') {
@@ -130,17 +136,18 @@ if ($method === 'POST') {
 
     $stmt = $pdo->prepare('
         INSERT INTO `news`
-            (`company_id`,`serial`,`manager`,`reg_date`,`reg_time`,
+            (`company_id`,`serial`,`manager`,`manager_user_id`,`reg_date`,`reg_time`,
              `client_id`,`client_name`,`media_code`,`media_name`,`journalist`,
              `categories`,`media_type`,`headline`,`link`,`file_name`,`file_path`)
-        VALUES (?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?,?)
+        VALUES (?,?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?,?)
     ');
     $stmt->execute([
         $company_id,
         $serial,
-        trim($_POST['manager']     ?? ''),
-        trim($_POST['reg_date']    ?? '') ?: null,
-        trim($_POST['reg_time']    ?? '') ?: null,
+        trim($_POST['manager']         ?? ''),
+        trim($_POST['manager_user_id'] ?? '') ?: null,
+        trim($_POST['reg_date']        ?? '') ?: null,
+        trim($_POST['reg_time']        ?? '') ?: null,
         (int)($_POST['client_id']  ?? 0) ?: null,
         trim($_POST['client_name'] ?? '') ?: null,
         trim($_POST['media_code']  ?? '') ?: null,
@@ -179,15 +186,16 @@ if ($method === 'PUT') {
 
     $stmt = $pdo->prepare('
         UPDATE `news` SET
-            `manager`=?,`reg_date`=?,`reg_time`=?,
+            `manager`=?,`manager_user_id`=?,`reg_date`=?,`reg_time`=?,
             `client_id`=?,`client_name`=?,`media_code`=?,`media_name`=?,`journalist`=?,
             `categories`=?,`media_type`=?,`headline`=?,`link`=?,`file_name`=?,`file_path`=?
         WHERE `id`=? AND `company_id`=?
     ');
     $stmt->execute([
-        trim($_POST['manager']     ?? ''),
-        trim($_POST['reg_date']    ?? '') ?: null,
-        trim($_POST['reg_time']    ?? '') ?: null,
+        trim($_POST['manager']         ?? ''),
+        trim($_POST['manager_user_id'] ?? '') ?: null,
+        trim($_POST['reg_date']        ?? '') ?: null,
+        trim($_POST['reg_time']        ?? '') ?: null,
         (int)($_POST['client_id']  ?? 0) ?: null,
         trim($_POST['client_name'] ?? '') ?: null,
         trim($_POST['media_code']  ?? '') ?: null,

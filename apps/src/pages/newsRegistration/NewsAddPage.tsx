@@ -32,7 +32,7 @@ function NewsAddPage() {
 
   const [form, setForm] = useState({
     serial:       '',
-    manager:      user.name || user.user_id || '',
+    manager:      user.user_type === 'manager' ? (user.name || user.user_id || '') : (user.company_name || user.user_id || ''),
     reg_date:     '',
     reg_time:     '',
     client_id:    '',
@@ -152,7 +152,8 @@ function NewsAddPage() {
     try {
       const fd = new FormData()
       fd.append('company_id',  activeCompanyId)
-      fd.append('manager',     form.manager)
+      fd.append('manager',        form.manager)
+      fd.append('manager_user_id', user.user_id || '')
       fd.append('reg_date',    form.reg_date)
       fd.append('reg_time',    form.reg_time)
       fd.append('client_id',   form.client_id)

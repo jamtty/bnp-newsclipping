@@ -210,6 +210,7 @@ interface NewsRow {
   link: string | null
   file_name: string | null
   file_path: string | null
+  manager_user_id: string | null
 }
 
 interface ClientOption {
@@ -370,12 +371,19 @@ function NewsRegistrationPage() {
   // 네이버에서 선택한 뉴스 일괄 등록
   const handleImport = async (items: FetchedItem[], targetCompanyId: string) => {
     const cid = user.user_type === 'super_admin' ? targetCompanyId : companyId
+    // manager 필드: super_admin → 선택 업체 상호, admin → 회사 상호, manager → 이름
+    const managerLabel = user.user_type === 'super_admin'
+      ? (companies.find(c => c.company_id === targetCompanyId)?.company_name || targetCompanyId)
+      : user.user_type === 'manager'
+        ? (user.name || user.user_id || '')
+        : (user.company_name || user.user_id || '')
     let successCount = 0
     for (const item of items) {
       const fd = new FormData()
       const pubDate = item.pub_date ? new Date(item.pub_date) : new Date()
-      fd.append('company_id', cid)
-      fd.append('manager',    user.name || user.user_id || '')
+      fd.append('company_id',       cid)
+      fd.append('manager',           managerLabel)
+      fd.append('manager_user_id',   user.user_id || '')
       fd.append('reg_date',   pubDate.toISOString().slice(0, 10))
       fd.append('reg_time',   pubDate.toTimeString().slice(0, 5))
       fd.append('media_name', item.source)
@@ -553,7 +561,7 @@ function NewsRegistrationPage() {
           뉴스 가져오기
         </button>
         <button className='btn-primary' onClick={() => navigate('/news-registration/new')}>뉴스등록</button>
-        {checkedIds.size > 0 && (
+        {checkedIds.size > 0 && user.user_type !== 'manager' && (
           <button className='btn-danger' onClick={handleDeleteSelected}>
             선택 삭제 ({checkedIds.size})
           </button>
@@ -579,7 +587,9 @@ function NewsRegistrationPage() {
           <thead>
             <tr>
               <th style={{ width: '3rem', textAlign: 'center' }}>
-                <input type='checkbox' checked={isAllChecked} onChange={e => toggleAll(e.target.checked)} />
+                {user.user_type !== 'manager' && (
+                  <input type='checkbox' checked={isAllChecked} onChange={e => toggleAll(e.target.checked)} />
+                )}
               </th>
               <th>등록일</th>
               <th>등록 담당자</th>
@@ -601,7 +611,9 @@ function NewsRegistrationPage() {
             {pageData.map(row => (
               <tr key={row.id} style={{ background: checkedIds.has(row.id) ? '#F0F7FF' : undefined }}>
                 <td style={{ textAlign: 'center' }}>
-                  <input type='checkbox' checked={checkedIds.has(row.id)} onChange={() => toggleCheck(row.id)} />
+                  {user.user_type !== 'manager' && (
+                    <input type='checkbox' checked={checkedIds.has(row.id)} onChange={() => toggleCheck(row.id)} />
+                  )}
                 </td>
                 <td>{row.reg_date}{row.reg_time ? ` ${row.reg_time}` : ''}</td>
                 <td>{row.manager}</td>
@@ -631,6 +643,7 @@ function NewsRegistrationPage() {
                         <path d='M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z' />
                       </svg>
                     </button>
+                    {user.user_type !== 'manager' && (
                     <button
                       className='btn-icon'
                       title='삭제'
@@ -643,6 +656,7 @@ function NewsRegistrationPage() {
                         <path d='M9 6V4h6v2' />
                       </svg>
                     </button>
+                    )}
                   </div>
                 </td>
               </tr>

@@ -35,7 +35,7 @@ function CompanyInfoPage() {
   return (
     <div className='page'>
       <div className='page-header'>
-        <h2 className='page-title'>회사정보</h2>
+        <h2 className='page-title'>업체 정보</h2>
         <nav className='breadcrumb'>
           <span className='breadcrumb-item'>
             <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'>
@@ -44,7 +44,7 @@ function CompanyInfoPage() {
             홈
           </span>
           <span className='breadcrumb-sep'>›</span>
-          <span className='breadcrumb-item active'>회사정보</span>
+          <span className='breadcrumb-item active'>업체 정보</span>
         </nav>
       </div>
 
