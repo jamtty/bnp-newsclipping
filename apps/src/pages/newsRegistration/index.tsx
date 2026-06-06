@@ -3,7 +3,28 @@ import { useNavigate } from 'react-router-dom'
 import Modal from '../../components/common/Modal'
 
 const API = '/api'
-const PAGE_SIZE = 10
+const PAGE_SIZE = 100
+const DAILY_FETCH_LIMIT = 100
+const DAILY_FETCH_KEY = 'naverFetchDaily'
+
+function getDailyFetchCount(): number {
+  try {
+    const raw = localStorage.getItem(DAILY_FETCH_KEY)
+    if (!raw) return 0
+    const parsed = JSON.parse(raw)
+    const today = new Date().toISOString().slice(0, 10)
+    if (parsed.date !== today) return 0
+    return parsed.count ?? 0
+  } catch { return 0 }
+}
+
+function addDailyFetchCount(n: number): number {
+  const today = new Date().toISOString().slice(0, 10)
+  const current = getDailyFetchCount()
+  const next = Math.min(DAILY_FETCH_LIMIT, current + n)
+  localStorage.setItem(DAILY_FETCH_KEY, JSON.stringify({ date: today, count: next }))
+  return next
+}
 
 // ── 네이버 뉴스 가져오기 모달 ─────────────────────────────
 interface FetchedItem {
@@ -15,12 +36,14 @@ interface FetchedItem {
   _checked?: boolean
 }
 
-function NaverFetchModal({ onClose, onImport, companies, isSuperAdmin }: {
+function NaverFetchModal({ onClose, onImport, companies, isSuperAdmin, allClients }: {
   onClose: () => void
-  onImport: (items: FetchedItem[], targetCompanyId: string) => void
+  onImport: (items: FetchedItem[], targetCompanyId: string, opts: { clientId: string; clientName: string; categories: string; mediaCode: string; mediaName: string }) => void
   companies: { company_id: string; company_name: string }[]
   isSuperAdmin: boolean
+  allClients: ClientOption[]
 }) {
+  const user = JSON.parse(sessionStorage.getItem('user') || '{}')
   const [query,   setQuery]   = useState('')
   const [sort,    setSort]    = useState<'date'|'sim'>('date')
   const [items,   setItems]   = useState<FetchedItem[]>([])
@@ -28,23 +51,83 @@ function NaverFetchModal({ onClose, onImport, companies, isSuperAdmin }: {
   const [error,   setError]   = useState('')
   const [start,   setStart]   = useState(1)
   const [total,   setTotal]   = useState(0)
-  const [targetCompanyId, setTargetCompanyId] = useState('')
+  const [dailyCount, setDailyCount] = useState(getDailyFetchCount)
+  const [targetCompanyId, setTargetCompanyId] = useState(isSuperAdmin ? '' : (user.company_id || ''))
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // 클라이언트/매체/기사분류 선택
+  const [selClientId,   setSelClientId]   = useState('')
+  const [selCategories, setSelCategories] = useState<string[]>([])
+  const [selMediaCode,  setSelMediaCode]  = useState('')
+  const [selMediaName,  setSelMediaName]  = useState('')
+  const [modalClients,  setModalClients]  = useState<ClientOption[]>([])
+  const [modalCategories, setModalCategories] = useState<string[]>([])
+  const [modalMediaList,  setModalMediaList]  = useState<{ media_code: string; media_name: string }[]>([])
 
   useEffect(() => { inputRef.current?.focus() }, [])
 
+  // 담당업체 변경 시 클라이언트/매체 재로드
+  useEffect(() => {
+    if (!targetCompanyId) { setModalClients([]); setModalMediaList([]); setSelClientId(''); setSelCategories([]); setSelMediaCode(''); setSelMediaName(''); return }
+    const filtered = allClients.filter(c => c.company_id === targetCompanyId)
+    setModalClients(filtered)
+    setSelClientId(''); setSelCategories([])
+    fetch(`${API}/media.php?company_id=${encodeURIComponent(targetCompanyId)}`)
+      .then(r => r.json())
+      .then(res => { if (res.success) setModalMediaList(res.data) })
+      .catch(() => {})
+  }, [targetCompanyId, allClients])
+
+  // 클라이언트 변경 시 기사분류 로드
+  useEffect(() => {
+    setSelCategories([])
+    if (!selClientId) { setModalCategories([]); return }
+    const cl = modalClients.find(c => String(c.id) === selClientId)
+    const cid = cl?.company_id || targetCompanyId
+    fetch(`${API}/clients.php?company_id=${encodeURIComponent(cid)}&id=${selClientId}`)
+      .then(r => r.json())
+      .then(res => {
+        if (res.success && res.data?.categories) {
+          setModalCategories(res.data.categories.map((c: { name: string }) => c.name))
+        } else setModalCategories([])
+      })
+      .catch(() => setModalCategories([]))
+  }, [selClientId])
+
+  // 클라이언트명 + 선택된 기사분류 + 입력 검색어를 조합
+  const buildSearchQuery = () => {
+    const parts: string[] = []
+    if (selClientId) {
+      const cl = modalClients.find(c => String(c.id) === selClientId)
+      if (cl?.company_name) parts.push(cl.company_name)
+    }
+    if (selCategories.length > 0) parts.push(...selCategories)
+    if (query.trim()) parts.push(query.trim())
+    return parts.join(' ')
+  }
+
   const search = (s = 1) => {
-    if (!query.trim()) return
+    const combinedQuery = buildSearchQuery()
+    if (!combinedQuery) return
+    const current = getDailyFetchCount()
+    const remaining = DAILY_FETCH_LIMIT - current
+    if (remaining <= 0) {
+      setError(`오늘 검색 가능한 뉴스 수(${DAILY_FETCH_LIMIT}개)를 모두 사용했습니다. 내일 다시 시도해주세요.`)
+      return
+    }
+    const display = Math.min(20, remaining)
     setLoading(true)
     setError('')
-    fetch(`${API}/news-fetch.php?query=${encodeURIComponent(query)}&display=20&start=${s}&sort=${sort}`)
+    fetch(`${API}/news-fetch.php?query=${encodeURIComponent(combinedQuery)}&display=${display}&start=${s}&sort=${sort}`)
       .then(r => r.json())
       .then(res => {
         if (!res.success) { setError(res.message ?? '오류'); return }
         const fetched: FetchedItem[] = res.items.map((it: FetchedItem) => ({ ...it, _checked: false }))
+        const newCount = addDailyFetchCount(fetched.length)
+        setDailyCount(newCount)
         setItems(s === 1 ? fetched : prev => [...prev, ...fetched])
         setTotal(res.total)
-        setStart(s + 20)
+        setStart(s + display)
       })
       .catch(() => setError('API 호출 실패'))
       .finally(() => setLoading(false))
@@ -61,6 +144,8 @@ function NaverFetchModal({ onClose, onImport, companies, isSuperAdmin }: {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') search(1)
   }
+
+  const canSearch = !!buildSearchQuery() && dailyCount < DAILY_FETCH_LIMIT
 
   return (
     <Modal title='네이버 뉴스 가져오기' onClose={onClose}>
@@ -83,13 +168,56 @@ function NaverFetchModal({ onClose, onImport, companies, isSuperAdmin }: {
           </div>
         )}
 
+        {/* 클라이언트 / 뉴스매체 선택 */}
+        {targetCompanyId && (
+          <div style={{ display: 'flex', gap: '0.8rem', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: 1, minWidth: '20rem' }}>
+              <span style={{ fontSize: '1.3rem', color: '#555', whiteSpace: 'nowrap', width: '7rem', flexShrink: 0 }}>클라이언트</span>
+              <select className='modal-input' value={selClientId} onChange={e => setSelClientId(e.target.value)} style={{ flex: 1 }}>
+                <option value=''>선택 안함</option>
+                {modalClients.map(c => <option key={c.id} value={String(c.id)}>{c.company_name}</option>)}
+              </select>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: 1, minWidth: '20rem' }}>
+              <span style={{ fontSize: '1.3rem', color: '#555', whiteSpace: 'nowrap', width: '7rem', flexShrink: 0 }}>뉴스매체</span>
+              <select className='modal-input' value={selMediaCode} disabled={!selClientId} onChange={e => {
+                const m = modalMediaList.find(m => m.media_code === e.target.value)
+                setSelMediaCode(e.target.value); setSelMediaName(m?.media_name || '')
+              }} style={{ flex: 1, opacity: selClientId ? 1 : 0.5, cursor: selClientId ? 'pointer' : 'not-allowed' }}>
+                <option value=''>선택 안함</option>
+                {modalMediaList.map(m => <option key={m.media_code} value={m.media_code}>{m.media_name}</option>)}
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* 기사분류 선택 */}
+        {selClientId && modalCategories.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', marginBottom: '0.4rem' }}>
+            <span style={{ fontSize: '1.3rem', color: '#555', whiteSpace: 'nowrap', width: '7rem', flexShrink: 0, paddingTop: '0.4rem' }}>기사분류</span>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem' }}>
+              {modalCategories.map(cat => (
+                <label key={cat} className='filter-checkbox-label'>
+                  <input
+                    type='checkbox'
+                    className='filter-checkbox'
+                    checked={selCategories.includes(cat)}
+                    onChange={() => setSelCategories(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat])}
+                  />
+                  {cat}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* 검색 바 */}
         <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}>
           <input
             ref={inputRef}
             className='modal-input'
             style={{ flex: 1 }}
-            placeholder='검색어 입력 후 Enter'
+            placeholder={selClientId ? '추가 검색어 (선택)' : '검색어 입력 후 Enter'}
             value={query}
             onChange={e => { setQuery(e.target.value); setError('') }}
             onKeyDown={handleKeyDown}
@@ -103,9 +231,15 @@ function NaverFetchModal({ onClose, onImport, companies, isSuperAdmin }: {
             <option value='date'>최신순</option>
             <option value='sim'>정확도순</option>
           </select>
-          <button className='btn-primary' onClick={() => search(1)} disabled={loading} style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+          <button className='btn-primary' onClick={() => search(1)} disabled={loading || !canSearch} style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
             검색
           </button>
+        </div>
+
+        {/* 일별 사용량 표시 */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '1.2rem', color: dailyCount >= DAILY_FETCH_LIMIT ? '#e53e3e' : '#888' }}>
+          오늘 사용: <strong style={{ marginLeft: '0.3rem' }}>{dailyCount}</strong>&nbsp;/&nbsp;{DAILY_FETCH_LIMIT}개
+          {dailyCount >= DAILY_FETCH_LIMIT && <span style={{ marginLeft: '0.5rem', color: '#e53e3e' }}>(오늘 한도 초과)</span>}
         </div>
 
         {error && <p className='modal-error' style={{ paddingLeft: 0 }}>{error}</p>}
@@ -165,10 +299,15 @@ function NaverFetchModal({ onClose, onImport, companies, isSuperAdmin }: {
         )}
 
         {/* 더 불러오기 */}
-        {items.length > 0 && items.length < total && (
+        {items.length > 0 && items.length < total && dailyCount < DAILY_FETCH_LIMIT && (
           <button className='btn-secondary' style={{ width: '100%' }} onClick={() => search(start)} disabled={loading}>
-            {loading ? '로딩 중...' : '더 불러오기'}
+            {loading ? '로딩 중...' : `더 불러오기 (남은 한도: ${DAILY_FETCH_LIMIT - dailyCount}개)`}
           </button>
+        )}
+        {items.length > 0 && items.length < total && dailyCount >= DAILY_FETCH_LIMIT && (
+          <p style={{ textAlign: 'center', padding: '1rem 0', color: '#e53e3e', fontSize: '1.3rem' }}>
+            오늘 검색 가능한 뉴스 수({DAILY_FETCH_LIMIT}개)를 모두 사용했습니다. 내일 다시 시도해주세요.
+          </p>
         )}
 
         {loading && items.length === 0 && (
@@ -185,7 +324,17 @@ function NaverFetchModal({ onClose, onImport, companies, isSuperAdmin }: {
         <button
           className='btn-primary'
           disabled={checkedItems.length === 0 || (isSuperAdmin && !targetCompanyId)}
-          onClick={() => { onImport(checkedItems, targetCompanyId); onClose() }}
+          onClick={() => {
+            const cl = modalClients.find(c => String(c.id) === selClientId)
+            onImport(checkedItems, targetCompanyId, {
+              clientId:   selClientId,
+              clientName: cl?.company_name || '',
+              categories: selCategories.join(','),
+              mediaCode:  selMediaCode,
+              mediaName:  selMediaName,
+            })
+            onClose()
+          }}
         >
           선택 가져오기 ({checkedItems.length})
         </button>
@@ -204,6 +353,7 @@ interface NewsRow {
   client_id: number | null
   client_name: string | null
   media_code: string | null
+  media_name: string | null
   categories: string | null
   media_type: string | null
   headline: string | null
@@ -369,9 +519,8 @@ function NewsRegistrationPage() {
   }
 
   // 네이버에서 선택한 뉴스 일괄 등록
-  const handleImport = async (items: FetchedItem[], targetCompanyId: string) => {
+  const handleImport = async (items: FetchedItem[], targetCompanyId: string, opts: { clientId: string; clientName: string; categories: string; mediaCode: string; mediaName: string }) => {
     const cid = user.user_type === 'super_admin' ? targetCompanyId : companyId
-    // manager 필드: super_admin → 선택 업체 상호, admin → 회사 상호, manager → 이름
     const managerLabel = user.user_type === 'super_admin'
       ? (companies.find(c => c.company_id === targetCompanyId)?.company_name || targetCompanyId)
       : user.user_type === 'manager'
@@ -386,10 +535,13 @@ function NewsRegistrationPage() {
       fd.append('manager_user_id',   user.user_id || '')
       fd.append('reg_date',   pubDate.toISOString().slice(0, 10))
       fd.append('reg_time',   pubDate.toTimeString().slice(0, 5))
-      fd.append('media_name', item.source)
+      fd.append('media_name', opts.mediaName || item.source)
+      fd.append('media_code', opts.mediaCode)
       fd.append('headline',   item.title)
       fd.append('link',       item.link)
       fd.append('media_type', '온라인')
+      if (opts.clientId)   { fd.append('client_id', opts.clientId); fd.append('client_name', opts.clientName) }
+      if (opts.categories) fd.append('categories', opts.categories)
 
       // 대표이미지 자동 가져오기
       if (item.link) {
@@ -574,6 +726,7 @@ function NewsRegistrationPage() {
           onImport={handleImport}
           companies={companies}
           isSuperAdmin={user.user_type === 'super_admin'}
+          allClients={clients}
         />
       )}
 
@@ -594,6 +747,7 @@ function NewsRegistrationPage() {
               <th>등록일</th>
               <th>등록 담당자</th>
               <th>클라이언트</th>
+              <th>뉴스매체</th>
               <th>기사분류</th>
               <th>미디어 type</th>
               <th>기사 Headline<br />기사 링크</th>
@@ -603,7 +757,7 @@ function NewsRegistrationPage() {
           <tbody>
             {pageData.length === 0 && !loading && (
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#999' }}>
+                <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#999' }}>
                   데이터가 없습니다.
                 </td>
               </tr>
@@ -618,9 +772,10 @@ function NewsRegistrationPage() {
                 <td>{row.reg_date}{row.reg_time ? ` ${row.reg_time}` : ''}</td>
                 <td>{row.manager}</td>
                 <td>{row.client_name}</td>
+                <td>{row.media_name}</td>
                 <td>{row.categories}</td>
                 <td>{row.media_type}</td>
-                <td>
+                <td style={{ textAlign: 'left' }}>
                   {row.link ? (
                     <a className='news-link' href={row.link} target='_blank' rel='noreferrer'>
                       {row.headline || (row.file_name ? '이미지/PDF' : row.link)}

@@ -182,6 +182,15 @@ if ($method === 'PUT') {
         // 새 파일 없으면 기존 유지
         $file['name'] = $old['file_name'] ?? null;
         $file['path'] = $old['file_path'] ?? null;
+    } else {
+        // 새 파일이 업로드됐으면 기존 파일 삭제
+        if (!empty($old['file_path'])) {
+            $oldFileName = basename($old['file_path']);
+            if ($oldFileName !== '') {
+                $oldFull = dirname(__DIR__) . '/uploads/news/' . $oldFileName;
+                if (file_exists($oldFull)) unlink($oldFull);
+            }
+        }
     }
 
     $stmt = $pdo->prepare('
@@ -231,8 +240,13 @@ if ($method === 'DELETE') {
     }
     $row = $q->fetch();
     if ($row && $row['file_path']) {
-        $full = dirname(__DIR__) . $row['file_path'];
-        if (file_exists($full)) unlink($full);
+        // file_path 는 '/uploads/news/파일명' 또는 '/backend/uploads/news/파일명' 형태로 저장될 수 있으므로
+        // basename 으로 파일명만 추출하여 실제 업로드 디렉터리에서 삭제
+        $fileName = basename($row['file_path']);
+        if ($fileName !== '') {
+            $full = dirname(__DIR__) . '/uploads/news/' . $fileName;
+            if (file_exists($full)) unlink($full);
+        }
     }
 
     if ($company_id !== '') {
