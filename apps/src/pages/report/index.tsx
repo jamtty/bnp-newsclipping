@@ -130,30 +130,6 @@ function ReportPage() {
     setFiltered(data)
   }
 
-  const printTemplate = (title: string, body: string) => `<!DOCTYPE html>
-<html lang="ko"><head><meta charset="UTF-8"><title>${title}</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Malgun Gothic', sans-serif; font-size: 1.2rem; padding: 2rem; }
-  h1 { font-size: 1.8rem; margin-bottom: 1.6rem; color: #222; border-bottom: 2px solid #5559F1; padding-bottom: 0.8rem; }
-  table { width: 100%; border-collapse: collapse; font-size: 1.2rem; }
-  th { background: #5559F1; color: #fff; padding: 0.8rem 1rem; text-align: center; }
-  td { padding: 0.7rem 1rem; border-bottom: 1px solid #eee; text-align: center; vertical-align: middle; }
-  a { color: #5559F1; text-decoration: none; }
-  @media print { body { padding: 0; } }
-  html { font-size: 10px; }
-</style></head>
-<body><h1>${title}</h1>${body}</body></html>`
-
-  const openPrint = (html: string) => {
-    const w = window.open('', '_blank', 'width=1100,height=800')
-    if (!w) return
-    w.document.write(html)
-    w.document.close()
-    w.focus()
-    setTimeout(() => w.print(), 400)
-  }
-
   const handlePrintA = () => {
     const headers = ['날짜', '매체명', '헤드라인', 'URL']
     const rows = filtered.map(r => [
