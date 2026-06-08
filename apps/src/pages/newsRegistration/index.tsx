@@ -4,27 +4,27 @@ import Modal from '../../components/common/Modal'
 
 const API = '/api'
 const PAGE_SIZE = 100
-const DAILY_FETCH_LIMIT = 100
-const DAILY_FETCH_KEY = 'naverFetchDaily'
+// const DAILY_FETCH_LIMIT = 100
+// const DAILY_FETCH_KEY = 'naverFetchDaily'
 
-function getDailyFetchCount(): number {
-  try {
-    const raw = localStorage.getItem(DAILY_FETCH_KEY)
-    if (!raw) return 0
-    const parsed = JSON.parse(raw)
-    const today = new Date().toISOString().slice(0, 10)
-    if (parsed.date !== today) return 0
-    return parsed.count ?? 0
-  } catch { return 0 }
-}
+// function getDailyFetchCount(): number {
+//   try {
+//     const raw = localStorage.getItem(DAILY_FETCH_KEY)
+//     if (!raw) return 0
+//     const parsed = JSON.parse(raw)
+//     const today = new Date().toISOString().slice(0, 10)
+//     if (parsed.date !== today) return 0
+//     return parsed.count ?? 0
+//   } catch { return 0 }
+// }
 
-function addDailyFetchCount(n: number): number {
-  const today = new Date().toISOString().slice(0, 10)
-  const current = getDailyFetchCount()
-  const next = Math.min(DAILY_FETCH_LIMIT, current + n)
-  localStorage.setItem(DAILY_FETCH_KEY, JSON.stringify({ date: today, count: next }))
-  return next
-}
+// function addDailyFetchCount(n: number): number {
+//   const today = new Date().toISOString().slice(0, 10)
+//   const current = getDailyFetchCount()
+//   const next = Math.min(DAILY_FETCH_LIMIT, current + n)
+//   localStorage.setItem(DAILY_FETCH_KEY, JSON.stringify({ date: today, count: next }))
+//   return next
+// }
 
 // ── 네이버 뉴스 가져오기 모달 ─────────────────────────────
 interface FetchedItem {
@@ -51,7 +51,7 @@ function NaverFetchModal({ onClose, onImport, companies, isSuperAdmin, allClient
   const [error,   setError]   = useState('')
   const [start,   setStart]   = useState(1)
   const [total,   setTotal]   = useState(0)
-  const [dailyCount, setDailyCount] = useState(getDailyFetchCount)
+  // const [dailyCount, setDailyCount] = useState(getDailyFetchCount)
   const [targetCompanyId, setTargetCompanyId] = useState(isSuperAdmin ? '' : (user.company_id || ''))
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -109,13 +109,13 @@ function NaverFetchModal({ onClose, onImport, companies, isSuperAdmin, allClient
   const search = (s = 1) => {
     const combinedQuery = buildSearchQuery()
     if (!combinedQuery) return
-    const current = getDailyFetchCount()
-    const remaining = DAILY_FETCH_LIMIT - current
-    if (remaining <= 0) {
-      setError(`오늘 검색 가능한 뉴스 수(${DAILY_FETCH_LIMIT}개)를 모두 사용했습니다. 내일 다시 시도해주세요.`)
-      return
-    }
-    const display = Math.min(20, remaining)
+    // const current = getDailyFetchCount()
+    // const remaining = DAILY_FETCH_LIMIT - current
+    // if (remaining <= 0) {
+    //   setError(`오늘 검색 가능한 뉴스 수(${DAILY_FETCH_LIMIT}개)를 모두 사용했습니다. 내일 다시 시도해주세요.`)
+    //   return
+    // }
+    const display = 20 // Math.min(20, remaining)
     setLoading(true)
     setError('')
     fetch(`${API}/news-fetch.php?query=${encodeURIComponent(combinedQuery)}&display=${display}&start=${s}&sort=${sort}`)
@@ -123,8 +123,8 @@ function NaverFetchModal({ onClose, onImport, companies, isSuperAdmin, allClient
       .then(res => {
         if (!res.success) { setError(res.message ?? '오류'); return }
         const fetched: FetchedItem[] = res.items.map((it: FetchedItem) => ({ ...it, _checked: false }))
-        const newCount = addDailyFetchCount(fetched.length)
-        setDailyCount(newCount)
+        // const newCount = addDailyFetchCount(fetched.length)
+        // setDailyCount(newCount)
         setItems(s === 1 ? fetched : prev => [...prev, ...fetched])
         setTotal(res.total)
         setStart(s + display)
@@ -145,7 +145,7 @@ function NaverFetchModal({ onClose, onImport, companies, isSuperAdmin, allClient
     if (e.key === 'Enter') search(1)
   }
 
-  const canSearch = !!buildSearchQuery() && dailyCount < DAILY_FETCH_LIMIT
+  const canSearch = !!buildSearchQuery() // && dailyCount < DAILY_FETCH_LIMIT
 
   return (
     <Modal title='네이버 뉴스 가져오기' onClose={onClose}>
@@ -236,11 +236,12 @@ function NaverFetchModal({ onClose, onImport, companies, isSuperAdmin, allClient
           </button>
         </div>
 
-        {/* 일별 사용량 표시 */}
+        {/* 일별 사용량 표시 (주석 처리)
         <div style={{ display: 'flex', justifyContent: 'flex-end', fontSize: '1.2rem', color: dailyCount >= DAILY_FETCH_LIMIT ? '#e53e3e' : '#888' }}>
           오늘 사용: <strong style={{ marginLeft: '0.3rem' }}>{dailyCount}</strong>&nbsp;/&nbsp;{DAILY_FETCH_LIMIT}개
           {dailyCount >= DAILY_FETCH_LIMIT && <span style={{ marginLeft: '0.5rem', color: '#e53e3e' }}>(오늘 한도 초과)</span>}
         </div>
+        */}
 
         {error && <p className='modal-error' style={{ paddingLeft: 0 }}>{error}</p>}
 
@@ -299,16 +300,18 @@ function NaverFetchModal({ onClose, onImport, companies, isSuperAdmin, allClient
         )}
 
         {/* 더 불러오기 */}
-        {items.length > 0 && items.length < total && dailyCount < DAILY_FETCH_LIMIT && (
+        {items.length > 0 && items.length < total && (
           <button className='btn-secondary' style={{ width: '100%' }} onClick={() => search(start)} disabled={loading}>
-            {loading ? '로딩 중...' : `더 불러오기 (남은 한도: ${DAILY_FETCH_LIMIT - dailyCount}개)`}
+            {loading ? '로딩 중...' : '더 불러오기'}
           </button>
         )}
+        {/* 한도 초과 메시지 (주석 처리)
         {items.length > 0 && items.length < total && dailyCount >= DAILY_FETCH_LIMIT && (
           <p style={{ textAlign: 'center', padding: '1rem 0', color: '#e53e3e', fontSize: '1.3rem' }}>
             오늘 검색 가능한 뉴스 수({DAILY_FETCH_LIMIT}개)를 모두 사용했습니다. 내일 다시 시도해주세요.
           </p>
         )}
+        */}
 
         {loading && items.length === 0 && (
           <p style={{ textAlign: 'center', padding: '3rem 0', color: '#888', fontSize: '1.4rem' }}>검색 중...</p>
@@ -535,7 +538,6 @@ function NewsRegistrationPage() {
       fd.append('manager_user_id',   user.user_id || '')
       fd.append('reg_date',   pubDate.toISOString().slice(0, 10))
       fd.append('reg_time',   pubDate.toTimeString().slice(0, 5))
-      fd.append('media_name', opts.mediaName || item.source)
       fd.append('media_code', opts.mediaCode)
       fd.append('headline',   item.title)
       fd.append('link',       item.link)
@@ -543,18 +545,24 @@ function NewsRegistrationPage() {
       if (opts.clientId)   { fd.append('client_id', opts.clientId); fd.append('client_name', opts.clientName) }
       if (opts.categories) fd.append('categories', opts.categories)
 
-      // 대표이미지 자동 가져오기
+      // 대표이미지 + 한글 매체명 + 기자명 자동 가져오기
+      let resolvedMediaName = opts.mediaName || ''
       if (item.link) {
         try {
           const imgRes = await fetch(`${API}/news-image.php?url=${encodeURIComponent(item.link)}`).then(r => r.json())
+          // 이미지 성공 여부와 관계없이 media_name, journalist는 항상 적용
           if (imgRes.success && imgRes.file_name) {
             fd.append('file_name_saved', imgRes.file_name)
             fd.append('file_path_saved', imgRes.file_path)
           }
+          if (imgRes.media_name) resolvedMediaName = imgRes.media_name
+          if (imgRes.journalist) fd.append('journalist', imgRes.journalist)
         } catch {
-          // 이미지 실패 시 무시하고 계속 등록
+          // 실패 시 무시
         }
       }
+      // 최종 매체명: og:site_name > 선택한 매체명 순서, 영문 호스트명은 사용 안 함
+      if (resolvedMediaName) fd.append('media_name', resolvedMediaName)
 
       const res = await fetch(`${API}/news.php`, { method: 'POST', body: fd }).then(r => r.json())
       if (res.success) successCount++
@@ -750,14 +758,15 @@ function NewsRegistrationPage() {
               <th>뉴스매체</th>
               <th>기사분류</th>
               <th>미디어 type</th>
-              <th>기사 Headline<br />기사 링크</th>
+              <th>기사 Headline / 링크</th>
+              <th>이미지</th>
               <th>관리</th>
             </tr>
           </thead>
           <tbody>
             {pageData.length === 0 && !loading && (
               <tr>
-                <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: '#999' }}>
+                <td colSpan={10} style={{ textAlign: 'center', padding: '2rem', color: '#999' }}>
                   데이터가 없습니다.
                 </td>
               </tr>
@@ -785,6 +794,16 @@ function NewsRegistrationPage() {
                   ) : (
                     <span>{row.headline}</span>
                   )}
+                </td>
+                <td style={{ textAlign: 'center' }}>
+                  {row.file_path ? (
+                    <img
+                      src={`${window.location.origin}/${row.file_path.replace(/^\//, '')}`}
+                      alt={row.file_name ?? ''}
+                      style={{ maxWidth: '8rem', maxHeight: '5.6rem', objectFit: 'cover', borderRadius: '0.4rem', border: '1px solid #eee', display: 'block', margin: '0 auto' }}
+                      onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                    />
+                  ) : null}
                 </td>
                 <td>
                   <div className='table-actions'>

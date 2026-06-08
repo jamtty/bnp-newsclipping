@@ -184,7 +184,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
         // 3) 매체
         $pdo->prepare("DELETE FROM `media` WHERE `company_id`=?")->execute([$del_id]);
 
-        // 4) 클라이언트
+        // 4) 클라이언트 기사분류 → 클라이언트 순서로 삭제
+        try {
+            $pdo->prepare("DELETE FROM `client_categories` WHERE `company_id`=?")->execute([$del_id]);
+        } catch (Exception $e) { /* 테이블 없으면 무시 */ }
         $pdo->prepare("DELETE FROM `clients` WHERE `company_id`=?")->execute([$del_id]);
 
         // 5) 담당자

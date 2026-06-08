@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- 배경 원 -->
+  <circle cx="32" cy="32" r="32" fill="#5559F1"/>
+  <!-- 신문 본체 -->
+  <rect x="12" y="16" width="40" height="32" rx="3" ry="3" fill="white"/>
+  <!-- 헤더 강조 바 -->
+  <rect x="12" y="16" width="40" height="8" rx="3" ry="3" fill="#E8E9FD"/>
+  <rect x="12" y="21" width="40" height="3" fill="#E8E9FD"/>
+  <!-- 제목 줄 -->
+  <rect x="17" y="19" width="22" height="3" rx="1.5" fill="#5559F1"/>
+  <!-- 날짜 줄 -->
+  <rect x="42" y="19" width="7" height="2" rx="1" fill="#9EA1F5"/>
+  <!-- 본문 줄 1 (굵은 헤드라인) -->
+  <rect x="17" y="28" width="30" height="3" rx="1.5" fill="#333"/>
+  <!-- 본문 줄 2 -->
+  <rect x="17" y="33" width="24" height="2" rx="1" fill="#999"/>
+  <!-- 본문 줄 3 -->
+  <rect x="17" y="37" width="27" height="2" rx="1" fill="#999"/>
+  <!-- 본문 줄 4 -->
+  <rect x="17" y="41" width="20" height="2" rx="1" fill="#999"/>
+  <!-- 클립 아이콘 (오른쪽 하단 핀) -->
+  <circle cx="46" cy="44" r="6" fill="#5559F1"/>
+  <path d="M43 44 L46 41 L49 44 L46 47 Z" fill="white"/>
+  <rect x="45" y="43" width="2" height="5" rx="1" fill="white"/>
+</svg>

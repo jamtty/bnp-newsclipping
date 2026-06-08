@@ -321,6 +321,14 @@
   background: #4347d0;
 }
 
+.modal .btn-primary {
+  height: 4.4rem;
+}
+
+.modal .btn-secondary {
+  height: 4.4rem;
+}
+
 .btn-secondary {
   height: 3.6rem;
   padding: 0 2rem;

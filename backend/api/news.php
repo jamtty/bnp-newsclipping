@@ -68,6 +68,38 @@ try {
     $pdo->exec("ALTER TABLE `news` ADD COLUMN `manager_user_id` VARCHAR(100) DEFAULT NULL COMMENT '등록자 user_id' AFTER `file_path`");
 } catch (Exception $e) { /* 이미 있으면 무시 */ }
 
+// media / media_journalists 테이블 없으면 생성
+try {
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `media` (
+          `id`          INT          NOT NULL AUTO_INCREMENT,
+          `company_id`  VARCHAR(50)  NOT NULL,
+          `media_code`  VARCHAR(10)  NOT NULL,
+          `media_name`  VARCHAR(100) NOT NULL DEFAULT '',
+          `region`      VARCHAR(50)  DEFAULT NULL,
+          `tel`         VARCHAR(30)  DEFAULT NULL,
+          `address`     VARCHAR(255) DEFAULT NULL,
+          `created_at`  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (`id`),
+          UNIQUE KEY `uq_company_media` (`company_id`, `media_code`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `media_journalists` (
+          `id`          INT          NOT NULL AUTO_INCREMENT,
+          `media_code`  VARCHAR(10)  NOT NULL,
+          `company_id`  VARCHAR(50)  NOT NULL,
+          `name`        VARCHAR(50)  NOT NULL,
+          `tel`         VARCHAR(30)  DEFAULT NULL,
+          `email`       VARCHAR(100) DEFAULT NULL,
+          `memo`        TEXT         DEFAULT NULL,
+          `created_at`  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (`id`),
+          KEY `idx_media_code` (`company_id`, `media_code`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+} catch (\Throwable $e) { /* 무시 */ }
+
 // ── GET ──────────────────────────────────────────────────
 if ($method === 'GET') {
     $company_id = trim($_GET['company_id'] ?? '');
@@ -134,6 +166,43 @@ if ($method === 'POST') {
 
     $file = handleUpload();
 
+    // ── 뉴스매체 자동 등록 ──────────────────────────────
+    $mediaName = trim($_POST['media_name'] ?? '');
+    $mediaCode = trim($_POST['media_code'] ?? '');
+    if ($mediaName !== '' && $company_id !== '') {
+        try {
+            $chkMedia = $pdo->prepare('SELECT `media_code` FROM `media` WHERE `company_id`=? AND `media_name`=? LIMIT 1');
+            $chkMedia->execute([$company_id, $mediaName]);
+            $existingMedia = $chkMedia->fetch();
+            if ($existingMedia) {
+                $mediaCode = $existingMedia['media_code'];
+            } elseif ($mediaCode === '') {
+                $maxStmt2 = $pdo->prepare('SELECT MAX(CAST(`media_code` AS UNSIGNED)) FROM `media` WHERE `company_id`=?');
+                $maxStmt2->execute([$company_id]);
+                $mediaCode = str_pad((int)$maxStmt2->fetchColumn() + 1, 4, '0', STR_PAD_LEFT);
+                $insMedia = $pdo->prepare('INSERT INTO `media` (`company_id`,`media_code`,`media_name`) VALUES (?,?,?)');
+                $insMedia->execute([$company_id, $mediaCode, $mediaName]);
+            }
+        } catch (\Throwable $e) {
+            // media 테이블 오류 무시, 뉴스 등록은 계속
+        }
+    }
+
+    // ── 소속 기자 자동 등록 ─────────────────────────────
+    $journalist = trim($_POST['journalist'] ?? '');
+    if ($journalist !== '' && $mediaCode !== '' && $company_id !== '') {
+        try {
+            $chkJ = $pdo->prepare('SELECT id FROM `media_journalists` WHERE `company_id`=? AND `media_code`=? AND `name`=? LIMIT 1');
+            $chkJ->execute([$company_id, $mediaCode, $journalist]);
+            if (!$chkJ->fetch()) {
+                $insJ = $pdo->prepare('INSERT INTO `media_journalists` (`company_id`,`media_code`,`name`) VALUES (?,?,?)');
+                $insJ->execute([$company_id, $mediaCode, $journalist]);
+            }
+        } catch (\Throwable $e) {
+            // media_journalists 테이블 오류 무시, 뉴스 등록은 계속
+        }
+    }
+
     $stmt = $pdo->prepare('
         INSERT INTO `news`
             (`company_id`,`serial`,`manager`,`manager_user_id`,`reg_date`,`reg_time`,
@@ -150,9 +219,9 @@ if ($method === 'POST') {
         trim($_POST['reg_time']        ?? '') ?: null,
         (int)($_POST['client_id']  ?? 0) ?: null,
         trim($_POST['client_name'] ?? '') ?: null,
-        trim($_POST['media_code']  ?? '') ?: null,
-        trim($_POST['media_name']  ?? '') ?: null,
-        trim($_POST['journalist']  ?? '') ?: null,
+        $mediaCode ?: null,
+        $mediaName ?: null,
+        $journalist ?: null,
         trim($_POST['categories']  ?? '') ?: null,
         trim($_POST['media_type']  ?? '') ?: null,
         trim($_POST['headline']    ?? '') ?: null,

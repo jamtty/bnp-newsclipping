@@ -51,11 +51,11 @@ function App() {
           <Route path='basic-data/client/edit' element={<RequireAdmin><ClientAddPage /></RequireAdmin>} />
           <Route path='basic-data/media' element={<RequireAdmin><MediaPage /></RequireAdmin>} />
           <Route path='basic-data/media/new' element={<RequireAdmin><MediaAddPage /></RequireAdmin>} />
-          <Route path='news-registration' element={<NewsRegistrationPage />} />
-          <Route path='news-registration/new' element={<NewsAddPage />} />
-          <Route path='news-registration/edit' element={<NewsAddPage />} />
-          <Route path='report' element={<ReportPage />} />
-          <Route path='my-page' element={<MyPage />} />
+          <Route path='news-registration' element={<RequireAuth><NewsRegistrationPage /></RequireAuth>} />
+          <Route path='news-registration/new' element={<RequireAuth><NewsAddPage /></RequireAuth>} />
+          <Route path='news-registration/edit' element={<RequireAuth><NewsAddPage /></RequireAuth>} />
+          <Route path='report' element={<RequireAuth><ReportPage /></RequireAuth>} />
+          <Route path='my-page' element={<RequireAuth><MyPage /></RequireAuth>} />
         </Route>
       </Routes>
     </BrowserRouter>
