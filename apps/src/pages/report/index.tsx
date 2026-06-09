@@ -19,6 +19,8 @@ interface NewsRow {
   manager: string | null
   reg_date: string
   reg_time: string | null
+  created_date: string | null
+  created_time: string | null
   company_id: string | null
   client_id: number | null
   client_name: string | null
@@ -31,6 +33,7 @@ interface NewsRow {
   file_name: string | null
   file_path: string | null
   journalist: string | null
+  sentiment: string | null
 }
 
 function ReportPage() {
@@ -43,11 +46,12 @@ function ReportPage() {
   const [data,          setData]          = useState<NewsRow[]>([])
   const [filtered,      setFiltered]      = useState<NewsRow[]>([])
   const [loading,       setLoading]       = useState(false)
+  const [searched,      setSearched]      = useState(false)
 
   const [companyFilter,   setCompanyFilter]   = useState('')
   const [clientFilterId,  setClientFilterId]  = useState('')
-  const [dateFrom,        setDateFrom]        = useState('')
-  const [dateTo,          setDateTo]          = useState('')
+  const [dateFrom,        setDateFrom]        = useState(() => new Date().toISOString().slice(0, 10))
+  const [dateTo,          setDateTo]          = useState(() => new Date().toISOString().slice(0, 10))
   const [categoryFilter,  setCategoryFilter]  = useState<string[]>([])
   const [mediaTypeFilter, setMediaTypeFilter] = useState('전체')
 
@@ -62,6 +66,7 @@ function ReportPage() {
   }, [])
 
   const loadAndSearch = () => {
+    setSearched(true)
     setLoading(true)
     const url = user.user_type === 'super_admin'
       ? `${API}/news.php`
@@ -106,14 +111,13 @@ function ReportPage() {
   const handleCategoryToggle = (cat: string) =>
     setCategoryFilter(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat])
 
-  const BASE_URL = window.location.origin
 
   const handleSearch = (all = data) => {
     let result = [...all]
     if (companyFilter)   result = result.filter(r => r.company_id === companyFilter)
     if (clientFilterId)  result = result.filter(r => r.client_id === Number(clientFilterId))
-    if (dateFrom)        result = result.filter(r => (r.reg_date ?? '') >= dateFrom)
-    if (dateTo)          result = result.filter(r => (r.reg_date ?? '') <= dateTo)
+    if (dateFrom)        result = result.filter(r => (r.created_date ?? r.reg_date ?? '') >= dateFrom)
+    if (dateTo)          result = result.filter(r => (r.created_date ?? r.reg_date ?? '') <= dateTo)
     if (categoryFilter.length > 0) {
       result = result.filter(r => {
         const cats = (r.categories || '').split(',').map(c => c.trim())
@@ -125,9 +129,9 @@ function ReportPage() {
   }
 
   const handleReset = () => {
-    setCompanyFilter(''); setClientFilterId(''); setDateFrom(''); setDateTo('')
+    setCompanyFilter(''); setClientFilterId(''); setDateFrom(new Date().toISOString().slice(0, 10)); setDateTo(new Date().toISOString().slice(0, 10))
     setCategoryFilter([]); setMediaTypeFilter('전체'); setAllCategories([])
-    setFiltered(data)
+    setFiltered([]); setSearched(false)
   }
 
   const handlePrintA = () => {
@@ -357,74 +361,6 @@ function ReportPage() {
     XLSX.writeFile(wb, `${prefix}_출력C_뉴스클리핑_${today}.xlsx`)
   }
 
-  const handleMediaReport = () => {
-    // 날짜+기사분류 조합으로 컬럼 헤더 생성
-    const dateCatSet = new Set<string>()
-    filtered.forEach(r => {
-      const d = r.reg_date ? r.reg_date.slice(5).replace('-', '/') : ''
-      const cats = (r.categories || '').split(',').map(c => c.trim()).filter(Boolean)
-      if (cats.length > 0) {
-        cats.forEach(cat => dateCatSet.add(`${d} ${cat}`))
-      } else {
-        dateCatSet.add(d)
-      }
-    })
-    const dateCols = [...dateCatSet].sort()
-
-    // 매체명+기자명 기준 행 구성
-    const rowMap: Record<string, { media: string; manager: string; counts: Record<string, number> }> = {}
-    filtered.forEach(r => {
-      const media = r.media_name || '미지정'
-      const manager = r.journalist || ''
-      const key = `${media}__${manager}`
-      if (!rowMap[key]) rowMap[key] = { media, manager, counts: {} }
-      const d = r.reg_date ? r.reg_date.slice(5).replace('-', '/') : ''
-      const cats = (r.categories || '').split(',').map(c => c.trim()).filter(Boolean)
-      if (cats.length > 0) {
-        cats.forEach(cat => {
-          const col = `${d} ${cat}`
-          rowMap[key].counts[col] = (rowMap[key].counts[col] || 0) + 1
-        })
-      } else {
-        rowMap[key].counts[d] = (rowMap[key].counts[d] || 0) + 1
-      }
-    })
-
-    const aoa: any[][] = []
-
-    // 헤더
-    aoa.push(['매체명', '기자명', ...dateCols])
-
-    // 데이터 행
-    Object.values(rowMap)
-      .sort((a, b) => a.media.localeCompare(b.media) || a.manager.localeCompare(b.manager))
-      .forEach(row => {
-        aoa.push([row.media, row.manager, ...dateCols.map(col => row.counts[col] || 0)])
-      })
-
-    const ws = XLSX.utils.aoa_to_sheet(aoa)
-    ws['!cols'] = [
-      { wch: 20 }, // 매체명
-      { wch: 12 }, // 기자명
-      ...dateCols.map(() => ({ wch: 12 })),
-    ]
-
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, '매체별노출리포트')
-
-    const selectedClient = clients.find(cl => String(cl.id) === clientFilterId)
-    const clientLabel = selectedClient?.company_name || ''
-    let companyLabel = ''
-    if (user.user_type === 'super_admin') {
-      const cid = selectedClient?.company_id || companyFilter
-      companyLabel = companies.find(c => c.company_id === cid)?.company_name || ''
-    } else {
-      companyLabel = user.company_name || ''
-    }
-    const prefix = companyLabel && clientLabel ? `(${companyLabel})${clientLabel}` : clientLabel || companyLabel || '전체'
-    const today = new Date().toISOString().slice(0, 10).replace(/-/g, '')
-    XLSX.writeFile(wb, `${prefix}_매체별노출리포트_뉴스클리핑_${today}.xlsx`)
-  }
 
   return (
     <div className='page'>
@@ -456,7 +392,7 @@ function ReportPage() {
               </div>
             )}
             <div className='filter-field'>
-              <span className='filter-label'>기간</span>
+              <span className='filter-label'>기사생성일</span>
               <div className='filter-date-range'>
                 <input type='date' className='filter-input filter-input-date' value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
                 <span className='filter-date-tilde'>~</span>
@@ -512,11 +448,9 @@ function ReportPage() {
       {/* 출력 버튼 */}
       <div className='content-card'>
         <div style={{ display: 'flex', gap: '1.2rem', flexWrap: 'wrap', alignItems: 'center' }}>
-          <button className='btn-primary' onClick={handlePrintA} disabled={filtered.length === 0 || loading || !clientFilterId}>출력 A</button>
-          <button className='btn-primary' onClick={handlePrintB} disabled={filtered.length === 0 || loading || !clientFilterId}>출력 B</button>
-
-          <button className='btn-primary' onClick={handlePrintC} disabled={filtered.length === 0 || loading || !clientFilterId}>출력 C</button>
-          <button className='btn-primary' onClick={handleMediaReport} disabled={filtered.length === 0 || loading || !clientFilterId}>매체별 뉴스 노출 리포트</button>
+          <button className='btn-primary' onClick={() => { if (!searched) { alert('클라이언트를 선택한 후 [조회] 버튼을 눌러주세요'); return }; handlePrintA() }} disabled={loading}>출력 A</button>
+          <button className='btn-primary' onClick={() => { if (!searched) { alert('클라이언트를 선택한 후 [조회] 버튼을 눌러주세요'); return }; handlePrintB() }} disabled={loading}>출력 B</button>
+          <button className='btn-primary' onClick={() => { if (!searched) { alert('클라이언트를 선택한 후 [조회] 버튼을 눌러주세요'); return }; handlePrintC() }} disabled={loading}>출력 C</button>
           {loading && <span style={{ fontSize: '1.3rem', color: '#999' }}>로딩 중...</span>}
           {!loading && filtered.length > 0 && <span style={{ fontSize: '1.3rem', color: '#555' }}>총 <strong>{filtered.length}</strong>건</span>}
         </div>
@@ -532,7 +466,7 @@ function ReportPage() {
           <table className='data-table'>
             <thead>
               <tr>
-                <th>등록일</th>
+                <th>생성일/등록일</th>
                 <th>등록 담당자</th>
                 <th>클라이언트</th>
                 <th>뉴스매체</th>
@@ -545,11 +479,24 @@ function ReportPage() {
             <tbody>
               {filtered.map(row => (
                 <tr key={row.id}>
-                  <td>{row.reg_date}{row.reg_time ? ` ${row.reg_time}` : ''}</td>
+                  <td>
+                    <div style={{ fontSize: '0.85em', color: '#888' }}>생성일: {row.created_date ?? ''}{row.created_time ? ` ${row.created_time}` : ''}</div>
+                    <div style={{ fontSize: '0.85em', color: '#888' }}>등록일: {row.reg_date}{row.reg_time ? ` ${row.reg_time}` : ''}</div>
+                  </td>
                   <td>{row.manager}</td>
                   <td>{row.client_name}</td>
                   <td>{row.media_name}</td>
-                  <td>{row.categories}</td>
+                  <td>
+                    <div>{row.categories}</div>
+                    {row.sentiment && (
+                      <div style={{
+                        fontSize: '0.82em', marginTop: '0.3rem', display: 'inline-block',
+                        padding: '0.1rem 0.5rem', borderRadius: '0.8rem',
+                        background: row.sentiment === '긍정' ? '#e6f4ea' : row.sentiment === '부정' ? '#fde8e8' : '#f3f3f3',
+                        color: row.sentiment === '긍정' ? '#2e7d32' : row.sentiment === '부정' ? '#c62828' : '#888',
+                      }}>{row.sentiment}</div>
+                    )}
+                  </td>
                   <td>{row.media_type}</td>
                   <td style={{ textAlign: 'left' }}>
                     {row.link ? (
@@ -563,13 +510,11 @@ function ReportPage() {
                   <td style={{ textAlign: 'center' }}>
                     {row.file_path ? (
                       <img
-                        src={`${BASE_URL}/${row.file_path.replace(/^\//, '')}`}
+                        src={row.file_path.startsWith('/backend/') ? row.file_path : `/backend/uploads/news/${row.file_path.replace(/.*\//, '')}`}
                         alt={row.file_name ?? ''}
                         style={{ maxWidth: '8rem', maxHeight: '5.6rem', objectFit: 'cover', borderRadius: '0.4rem', border: '1px solid #eee', display: 'block', margin: '0 auto' }}
                         onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
                       />
-                    ) : row.file_name ? (
-                      <span style={{ fontSize: '1.2rem', color: '#888' }}>파일</span>
                     ) : null}
                   </td>
                 </tr>

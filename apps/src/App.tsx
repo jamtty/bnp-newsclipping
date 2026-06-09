@@ -10,6 +10,7 @@ import MediaAddPage from './pages/basicData/MediaAddPage'
 import NewsRegistrationPage from './pages/newsRegistration'
 import NewsAddPage from './pages/newsRegistration/NewsAddPage'
 import ReportPage from './pages/report'
+import MediaStatisticsPage from './pages/statistics/MediaStatisticsPage'
 import MyPage from './pages/myPage'
 import CompanyPage from './pages/company/CompanyPage'
 import CompanyAddPage from './pages/company/CompanyAddPage'
@@ -55,6 +56,7 @@ function App() {
           <Route path='news-registration/new' element={<RequireAuth><NewsAddPage /></RequireAuth>} />
           <Route path='news-registration/edit' element={<RequireAuth><NewsAddPage /></RequireAuth>} />
           <Route path='report' element={<RequireAuth><ReportPage /></RequireAuth>} />
+          <Route path='statistics' element={<RequireAdmin><MediaStatisticsPage /></RequireAdmin>} />
           <Route path='my-page' element={<RequireAuth><MyPage /></RequireAuth>} />
         </Route>
       </Routes>
