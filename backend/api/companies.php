@@ -99,6 +99,92 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $main_contact, $main_manager, $mobile, $manager_email,
         ]);
 
+        // ── 기본 뉴스매체 50개 자동 등록 ──────────────────────
+        $pdo->exec("
+            CREATE TABLE IF NOT EXISTS `media` (
+              `id`          INT          NOT NULL AUTO_INCREMENT,
+              `company_id`  VARCHAR(50)  NOT NULL,
+              `media_code`  VARCHAR(10)  NOT NULL,
+              `media_name`  VARCHAR(100) NOT NULL DEFAULT '',
+              `region`      VARCHAR(50)  DEFAULT NULL,
+              `tel`         VARCHAR(30)  DEFAULT NULL,
+              `address`     VARCHAR(255) DEFAULT NULL,
+              `created_at`  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+              PRIMARY KEY (`id`),
+              UNIQUE KEY `uq_company_media` (`company_id`, `media_code`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+
+        $defaultMedia = [
+            // 전국 종합일간지
+            ['연합뉴스',       '전국', '통신사'],
+            ['뉴시스',         '전국', '통신사'],
+            ['뉴스1',          '전국', '통신사'],
+            ['조선일보',       '전국', '종합일간지'],
+            ['중앙일보',       '전국', '종합일간지'],
+            ['동아일보',       '전국', '종합일간지'],
+            ['한겨레',         '전국', '종합일간지'],
+            ['경향신문',       '전국', '종합일간지'],
+            ['국민일보',       '전국', '종합일간지'],
+            ['세계일보',       '전국', '종합일간지'],
+            ['한국일보',       '전국', '종합일간지'],
+            ['문화일보',       '전국', '종합일간지'],
+            ['서울신문',       '전국', '종합일간지'],
+            ['내일신문',       '전국', '종합일간지'],
+            // 경제지
+            ['매일경제',       '전국', '경제지'],
+            ['한국경제',       '전국', '경제지'],
+            ['서울경제',       '전국', '경제지'],
+            ['머니투데이',     '전국', '경제지'],
+            ['파이낸셜뉴스',   '전국', '경제지'],
+            ['헤럴드경제',     '전국', '경제지'],
+            ['이데일리',       '전국', '경제지'],
+            ['아시아경제',     '전국', '경제지'],
+            ['비즈니스워치',   '전국', '경제지'],
+            ['디지털타임스',   '전국', '경제지'],
+            ['전자신문',       '전국', '경제지'],
+            // 방송
+            ['KBS뉴스',        '전국', '방송'],
+            ['MBC뉴스',        '전국', '방송'],
+            ['SBS뉴스',        '전국', '방송'],
+            ['JTBC뉴스',       '전국', '방송'],
+            ['TV조선',         '전국', '방송'],
+            ['채널A',          '전국', '방송'],
+            ['MBN',            '전국', '방송'],
+            ['YTN',            '전국', '방송'],
+            ['연합뉴스TV',     '전국', '방송'],
+            ['한국경제TV',     '전국', '방송'],
+            // 인터넷뉴스
+            ['노컷뉴스',       '전국', '인터넷'],
+            ['오마이뉴스',     '전국', '인터넷'],
+            ['프레시안',       '전국', '인터넷'],
+            ['데일리안',       '전국', '인터넷'],
+            ['뉴데일리',       '전국', '인터넷'],
+            ['미디어오늘',     '전국', '인터넷'],
+            ['시사저널',       '전국', '인터넷'],
+            ['시사인',         '전국', '인터넷'],
+            // 스포츠
+            ['스포츠조선',     '전국', '스포츠'],
+            ['스포츠서울',     '전국', '스포츠'],
+            ['스포츠경향',     '전국', '스포츠'],
+            ['일간스포츠',     '전국', '스포츠'],
+            // 지역
+            ['부산일보',       '부산', '지역일간지'],
+            ['국제신문',       '부산', '지역일간지'],
+            ['광주일보',       '광주', '지역일간지'],
+            ['강원일보',       '강원', '지역일간지'],
+        ];
+
+        $mStmt = $pdo->prepare("
+            INSERT IGNORE INTO `media` (`company_id`,`media_code`,`media_name`,`region`)
+            VALUES (?,?,?,?)
+        ");
+        foreach ($defaultMedia as $idx => $m) {
+            $mediaCode = str_pad($idx + 1, 4, '0', STR_PAD_LEFT);
+            $mStmt->execute([$company_id, $mediaCode, $m[0], $m[1]]);
+        }
+        // ──────────────────────────────────────────────────────
+
         echo json_encode(['success' => true, 'message' => '업체가 등록되었습니다']);
     } catch (Exception $e) {
         http_response_code(500);
@@ -193,7 +279,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
         // 5) 담당자
         $pdo->prepare("DELETE FROM `managers` WHERE `company_id`=?")->execute([$del_id]);
 
-        // 6) 업체 계정 (users)
+        // 6) 업체 환경설정 (company_settings)
+        try {
+            $pdo->prepare("DELETE FROM `company_settings` WHERE `company_id`=?")->execute([$del_id]);
+        } catch (Exception $e) { /* 테이블 없으면 무시 */ }
+
+        // 7) 업체 계정 (users)
         $pdo->prepare("DELETE FROM `users` WHERE `company_id`=? AND `user_type`='admin'")->execute([$del_id]);
 
         $pdo->commit();

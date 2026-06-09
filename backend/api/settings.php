@@ -31,6 +31,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 require_once dirname(__DIR__) . '/config.php';
 
+// company_settings 테이블 자동 생성
+try {
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS `company_settings` (
+          `id`                INT          NOT NULL AUTO_INCREMENT,
+          `company_id`        VARCHAR(50)  NOT NULL,
+          `positive_keywords` TEXT         DEFAULT NULL COMMENT '긍정 키워드(쉼표 구분)',
+          `negative_keywords` TEXT         DEFAULT NULL COMMENT '부정 키워드(쉼표 구분)',
+          `created_at`        TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+          `updated_at`        TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          PRIMARY KEY (`id`),
+          UNIQUE KEY `uq_company` (`company_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
+} catch (Exception $e) { /* 무시 */ }
+
 // ── GET: 설정 조회 ───────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $company_id = trim($_GET['company_id'] ?? '');
@@ -71,6 +87,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             exit;
         }
 
+        // 키워드 설정 추가 조회
+        $csStmt = $pdo->prepare('SELECT `positive_keywords`, `negative_keywords` FROM `company_settings` WHERE `company_id` = ? LIMIT 1');
+        $csStmt->execute([$company_id]);
+        $cs = $csStmt->fetch();
+        $row['positive_keywords'] = $cs['positive_keywords'] ?? '';
+        $row['negative_keywords'] = $cs['negative_keywords'] ?? '';
+
         echo json_encode(['success' => true, 'data' => $row]);
 
     } catch (Exception $e) {
@@ -92,11 +115,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    $company_name  = trim($body['company_name']  ?? '');
-    $main_contact  = trim($body['main_contact']  ?? '');
-    $main_manager  = trim($body['main_manager']  ?? '');
-    $mobile        = trim($body['mobile']        ?? '');
-    $manager_email = trim($body['manager_email'] ?? '');
+    $company_name      = trim($body['company_name']      ?? '');
+    $main_contact      = trim($body['main_contact']      ?? '');
+    $main_manager      = trim($body['main_manager']      ?? '');
+    $mobile            = trim($body['mobile']            ?? '');
+    $manager_email     = trim($body['manager_email']     ?? '');
+    $positive_keywords = trim($body['positive_keywords'] ?? '');
+    $negative_keywords = trim($body['negative_keywords'] ?? '');
 
     try {
         $stmt = $pdo->prepare('
@@ -109,6 +134,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             WHERE `company_id` = ? AND `user_id` = ?
         ');
         $stmt->execute([$company_name, $main_contact, $main_manager, $mobile, $manager_email, $company_id, $user_id]);
+
+        // 키워드 저장 (UPSERT)
+        $csStmt = $pdo->prepare('
+            INSERT INTO `company_settings` (`company_id`, `positive_keywords`, `negative_keywords`)
+            VALUES (?, ?, ?)
+            ON DUPLICATE KEY UPDATE `positive_keywords` = VALUES(`positive_keywords`), `negative_keywords` = VALUES(`negative_keywords`)
+        ');
+        $csStmt->execute([$company_id, $positive_keywords, $negative_keywords]);
 
         echo json_encode(['success' => true, 'message' => '저장되었습니다']);
 

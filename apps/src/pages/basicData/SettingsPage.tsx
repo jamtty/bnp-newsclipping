@@ -1,28 +1,32 @@
 import { useEffect, useState } from 'react'
 
 interface SettingsForm {
-  company_id:    string
-  user_id:       string
-  user_type:     string
-  company_name:  string
-  main_contact:  string
-  main_manager:  string
-  mobile:        string
-  manager_email: string
+  company_id:         string
+  user_id:            string
+  user_type:          string
+  company_name:       string
+  main_contact:       string
+  main_manager:       string
+  mobile:             string
+  manager_email:      string
+  positive_keywords:  string
+  negative_keywords:  string
 }
 
 function SettingsPage() {
   const user = JSON.parse(sessionStorage.getItem('user') || '{}')
 
   const [form, setForm] = useState<SettingsForm>({
-    company_id:    '',
-    user_id:       '',
-    user_type:     '',
-    company_name:  '',
-    main_contact:  '',
-    main_manager:  '',
-    mobile:        '',
-    manager_email: '',
+    company_id:         '',
+    user_id:            '',
+    user_type:          '',
+    company_name:       '',
+    main_contact:       '',
+    main_manager:       '',
+    mobile:             '',
+    manager_email:      '',
+    positive_keywords:  '',
+    negative_keywords:  '',
   })
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -124,6 +128,18 @@ function SettingsPage() {
             <label className='form-label'>담당자 이메일</label>
             <input className='form-input' type='text' name='manager_email' autoComplete='off'
               value={form.manager_email} onChange={handleChange} />
+          </div>
+          <div className='form-field' style={{ gridColumn: '1 / -1' }}>
+            <label className='form-label'>긍정 키워드<br />(쉼표로 구분)</label>
+            <input className='form-input' type='text' name='positive_keywords' autoComplete='off'
+              placeholder='예) 호실, 성장, 수상'
+              value={form.positive_keywords} onChange={handleChange} />
+          </div>
+          <div className='form-field' style={{ gridColumn: '1 / -1' }}>
+            <label className='form-label'>부정 키워드<br />(쉼표로 구분)</label>
+            <input className='form-input' type='text' name='negative_keywords' autoComplete='off'
+              placeholder='예) 실패, 부실, 사고'
+              value={form.negative_keywords} onChange={handleChange} />
           </div>
         </div>
       </div>

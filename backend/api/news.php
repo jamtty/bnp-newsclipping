@@ -55,18 +55,49 @@ $pdo->exec("
       `file_name`    VARCHAR(255)  DEFAULT NULL              COMMENT '첨부파일명',
       `file_path`    VARCHAR(500)  DEFAULT NULL              COMMENT '첨부파일 경로',
       `manager_user_id` VARCHAR(100) DEFAULT NULL            COMMENT '등록자 user_id',
-      `created_at`   TIMESTAMP     DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (`id`),
       KEY `idx_company` (`company_id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 ");
 
 $method = $_SERVER['REQUEST_METHOD'];
+// POST + _method 오버라이드 지원 (PUT multipart 파싱 문제 회피)
+if ($method === 'POST' && isset($_POST['_method'])) {
+    $method = strtoupper($_POST['_method']);
+}
 
 // manager_user_id 컬럼 없으면 추가 (구버전 DB 대응)
 try {
     $pdo->exec("ALTER TABLE `news` ADD COLUMN `manager_user_id` VARCHAR(100) DEFAULT NULL COMMENT '등록자 user_id' AFTER `file_path`");
 } catch (Exception $e) { /* 이미 있으면 무시 */ }
+try {
+    $pdo->exec("ALTER TABLE `news` ADD COLUMN `created_date` DATE DEFAULT NULL COMMENT '생성일' AFTER `manager_user_id`");
+} catch (Exception $e) { /* 이미 있으면 무시 */ }
+try {
+    $pdo->exec("ALTER TABLE `news` ADD COLUMN `created_time` VARCHAR(5) DEFAULT NULL COMMENT '생성시간(HH:MM)' AFTER `created_date`");
+} catch (Exception $e) { /* 이미 있으면 무시 */ }
+try {
+    $pdo->exec("ALTER TABLE `news` ADD COLUMN `sentiment` VARCHAR(10) DEFAULT '중립' COMMENT '기사성향(긍정/부정/중립)' AFTER `created_time`");
+} catch (Exception $e) { /* 이미 있으면 무시 */ }
+
+// 키워드 기반 기사 성향 판별 함수
+function detectSentiment(string $text, string $company_id, $pdo): string {
+    $cs = $pdo->prepare('SELECT `positive_keywords`, `negative_keywords` FROM `company_settings` WHERE `company_id` = ? LIMIT 1');
+    $cs->execute([$company_id]);
+    $row = $cs->fetch();
+    if (!$row) return '중립';
+
+    $posWords = array_filter(array_map('trim', explode(',', $row['positive_keywords'] ?? '')));
+    $negWords = array_filter(array_map('trim', explode(',', $row['negative_keywords'] ?? '')));
+
+    foreach ($negWords as $w) {
+        if ($w !== '' && mb_strpos($text, $w) !== false) return '부정';
+    }
+    foreach ($posWords as $w) {
+        if ($w !== '' && mb_strpos($text, $w) !== false) return '긍정';
+    }
+    return '중립';
+}
 
 // media / media_journalists 테이블 없으면 생성
 try {
@@ -149,7 +180,7 @@ function handleUpload(): array {
     $dest     = $uploadDir . $safeName;
     if (!move_uploaded_file($_FILES['file']['tmp_name'], $dest)) return ['name' => null, 'path' => null];
 
-    return ['name' => $origName, 'path' => '/uploads/news/' . $safeName];
+    return ['name' => $origName, 'path' => '/backend/uploads/news/' . $safeName];
 }
 
 // ── POST: 신규 ───────────────────────────────────────────
@@ -203,12 +234,21 @@ if ($method === 'POST') {
         }
     }
 
+    $now_date = date('Y-m-d');
+    $now_time = date('H:i');
+    $headline_text = trim($_POST['headline'] ?? '');
+    $sentiment_manual = trim($_POST['sentiment'] ?? '');
+    $sentiment = in_array($sentiment_manual, ['긍정','부정','중립'], true)
+        ? $sentiment_manual
+        : detectSentiment($headline_text, $company_id, $pdo);
+
     $stmt = $pdo->prepare('
         INSERT INTO `news`
             (`company_id`,`serial`,`manager`,`manager_user_id`,`reg_date`,`reg_time`,
              `client_id`,`client_name`,`media_code`,`media_name`,`journalist`,
-             `categories`,`media_type`,`headline`,`link`,`file_name`,`file_path`)
-        VALUES (?,?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?,?)
+             `categories`,`media_type`,`headline`,`link`,`file_name`,`file_path`,
+             `created_date`,`created_time`,`sentiment`)
+        VALUES (?,?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?,?, ?,?,?)
     ');
     $stmt->execute([
         $company_id,
@@ -224,10 +264,13 @@ if ($method === 'POST') {
         $journalist ?: null,
         trim($_POST['categories']  ?? '') ?: null,
         trim($_POST['media_type']  ?? '') ?: null,
-        trim($_POST['headline']    ?? '') ?: null,
+        $headline_text ?: null,
         trim($_POST['link']        ?? '') ?: null,
         $file['name'],
         $file['path'],
+        $now_date,
+        $now_time,
+        $sentiment,
     ]);
 
     echo json_encode(['success' => true, 'id' => (int)$pdo->lastInsertId(), 'serial' => $serial]);
@@ -236,9 +279,9 @@ if ($method === 'POST') {
 
 // ── PUT: 수정 ────────────────────────────────────────────
 if ($method === 'PUT') {
-    // PUT도 multipart로 전송되므로 $_POST 사용
-    $id         = (int)($_POST['id']         ?? 0);
-    $company_id = trim($_POST['company_id']  ?? '');
+    // id, company_id는 URL 쿼리스트링으로 전달 (PHP는 PUT multipart에서 $_POST 자동 파싱 불가)
+    $id         = (int)($_GET['id']         ?? 0);
+    $company_id = trim($_GET['company_id']  ?? '');
     if (!$id || $company_id === '') { http_response_code(400); echo json_encode(['success' => false, 'message' => 'id, company_id 필요']); exit; }
 
     // 기존 파일 경로 조회
@@ -248,25 +291,53 @@ if ($method === 'PUT') {
 
     $file = handleUpload();
     if ($file['name'] === null) {
-        // 새 파일 없으면 기존 유지
-        $file['name'] = $old['file_name'] ?? null;
-        $file['path'] = $old['file_path'] ?? null;
-    } else {
-        // 새 파일이 업로드됐으면 기존 파일 삭제
-        if (!empty($old['file_path'])) {
-            $oldFileName = basename($old['file_path']);
-            if ($oldFileName !== '') {
-                $oldFull = dirname(__DIR__) . '/uploads/news/' . $oldFileName;
-                if (file_exists($oldFull)) unlink($oldFull);
+        // delete_file=1 이면 명시적 삭제 (FTP 파일도 삭제)
+        if (!empty($_POST['delete_file'])) {
+            if (!empty($old['file_path'])) {
+                $fp = $old['file_path'];
+                if (str_starts_with($fp, '/backend/')) {
+                    $delFull = dirname(__DIR__) . '/' . ltrim(substr($fp, strlen('/backend/')), '/');
+                } elseif (str_starts_with($fp, '/uploads/')) {
+                    $delFull = dirname(__DIR__) . $fp;
+                } else {
+                    $delFull = dirname(__DIR__) . '/uploads/news/' . basename($fp);
+                }
+                if (is_file($delFull)) @unlink($delFull);
             }
+            $file['name'] = null;
+            $file['path'] = null;
+        } else {
+            // 새 파일 없으면 기존 유지
+            $file['name'] = $old['file_name'] ?? null;
+            $file['path'] = $old['file_path'] ?? null;
+        }
+    } else {
+        // 새 파일이 업로드됐으면 기존 파일 삭제 (단, 경로가 동일한 경우 삭제 안 함)
+        if (!empty($old['file_path']) && $old['file_path'] !== $file['path']) {
+            $fp = $old['file_path'];
+            if (str_starts_with($fp, '/backend/')) {
+                $oldFull = dirname(__DIR__) . '/' . ltrim(substr($fp, strlen('/backend/')), '/');
+            } elseif (str_starts_with($fp, '/uploads/')) {
+                $oldFull = dirname(__DIR__) . $fp;
+            } else {
+                $oldFull = dirname(__DIR__) . '/uploads/news/' . basename($fp);
+            }
+            if (is_file($oldFull)) @unlink($oldFull);
         }
     }
+
+    $put_headline = trim($_POST['headline'] ?? '') ?: null;
+    // 직접 선택한 성향값 우선, 없으면 자동 판별
+    $put_sentiment_manual = trim($_POST['sentiment'] ?? '');
+    $put_sentiment = in_array($put_sentiment_manual, ['긍정','부정','중립'], true)
+        ? $put_sentiment_manual
+        : detectSentiment($put_headline ?? '', $company_id, $pdo);
 
     $stmt = $pdo->prepare('
         UPDATE `news` SET
             `manager`=?,`manager_user_id`=?,`reg_date`=?,`reg_time`=?,
             `client_id`=?,`client_name`=?,`media_code`=?,`media_name`=?,`journalist`=?,
-            `categories`=?,`media_type`=?,`headline`=?,`link`=?,`file_name`=?,`file_path`=?
+            `categories`=?,`media_type`=?,`headline`=?,`link`=?,`file_name`=?,`file_path`=?,`sentiment`=?
         WHERE `id`=? AND `company_id`=?
     ');
     $stmt->execute([
@@ -281,10 +352,11 @@ if ($method === 'PUT') {
         trim($_POST['journalist']  ?? '') ?: null,
         trim($_POST['categories']  ?? '') ?: null,
         trim($_POST['media_type']  ?? '') ?: null,
-        trim($_POST['headline']    ?? '') ?: null,
+        $put_headline,
         trim($_POST['link']        ?? '') ?: null,
         $file['name'],
         $file['path'],
+        $put_sentiment,
         $id,
         $company_id,
     ]);
@@ -309,12 +381,18 @@ if ($method === 'DELETE') {
     }
     $row = $q->fetch();
     if ($row && $row['file_path']) {
-        // file_path 는 '/uploads/news/파일명' 또는 '/backend/uploads/news/파일명' 형태로 저장될 수 있으므로
-        // basename 으로 파일명만 추출하여 실제 업로드 디렉터리에서 삭제
-        $fileName = basename($row['file_path']);
-        if ($fileName !== '') {
-            $full = dirname(__DIR__) . '/uploads/news/' . $fileName;
-            if (file_exists($full)) unlink($full);
+        // '/uploads/news/파일명' 또는 '/backend/uploads/news/파일명' 두 형태 모두 처리
+        $fp = $row['file_path'];
+        // 절대경로로 변환 시도 (backend 기준)
+        if (str_starts_with($fp, '/backend/')) {
+            $full = dirname(__DIR__) . '/' . ltrim(substr($fp, strlen('/backend/')), '/');
+        } elseif (str_starts_with($fp, '/uploads/')) {
+            $full = dirname(__DIR__) . $fp;
+        } else {
+            $full = dirname(__DIR__) . '/uploads/news/' . basename($fp);
+        }
+        if (is_file($full)) {
+            @unlink($full);
         }
     }
 

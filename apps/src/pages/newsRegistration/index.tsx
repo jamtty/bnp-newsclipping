@@ -170,20 +170,20 @@ function NaverFetchModal({ onClose, onImport, companies, isSuperAdmin, allClient
 
         {/* 클라이언트 / 뉴스매체 선택 */}
         {targetCompanyId && (
-          <div style={{ display: 'flex', gap: '0.8rem', marginBottom: '0.4rem', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: 1, minWidth: '20rem' }}>
-              <span style={{ fontSize: '1.3rem', color: '#555', whiteSpace: 'nowrap', width: '7rem', flexShrink: 0 }}>클라이언트</span>
-              <select className='modal-input' value={selClientId} onChange={e => setSelClientId(e.target.value)} style={{ flex: 1 }}>
+          <div style={{ display: 'flex', gap: '0.8rem', marginBottom: '0.4rem', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <span style={{ fontSize: '1.3rem', color: '#555', whiteSpace: 'nowrap', flexShrink: 0 }}>클라이언트</span>
+              <select className='modal-input' value={selClientId} onChange={e => setSelClientId(e.target.value)} style={{ width: 'auto' }}>
                 <option value=''>선택 안함</option>
                 {modalClients.map(c => <option key={c.id} value={String(c.id)}>{c.company_name}</option>)}
               </select>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: 1, minWidth: '20rem' }}>
-              <span style={{ fontSize: '1.3rem', color: '#555', whiteSpace: 'nowrap', width: '7rem', flexShrink: 0 }}>뉴스매체</span>
-              <select className='modal-input' value={selMediaCode} disabled={!selClientId} onChange={e => {
+              <span style={{ fontSize: '1.3rem', color: '#555', whiteSpace: 'nowrap', flexShrink: 0 }}>뉴스매체</span>
+              <select className='modal-input' value={selMediaCode} onChange={e => {
                 const m = modalMediaList.find(m => m.media_code === e.target.value)
                 setSelMediaCode(e.target.value); setSelMediaName(m?.media_name || '')
-              }} style={{ flex: 1, opacity: selClientId ? 1 : 0.5, cursor: selClientId ? 'pointer' : 'not-allowed' }}>
+              }} style={{ width: 'auto', maxWidth: '28rem' }}>
                 <option value=''>선택 안함</option>
                 {modalMediaList.map(m => <option key={m.media_code} value={m.media_code}>{m.media_name}</option>)}
               </select>
@@ -364,6 +364,10 @@ interface NewsRow {
   file_name: string | null
   file_path: string | null
   manager_user_id: string | null
+  created_date: string | null
+  created_time: string | null
+  journalist: string | null
+  sentiment: string | null
 }
 
 interface ClientOption {
@@ -402,8 +406,8 @@ function NewsRegistrationPage() {
   // 필터 상태
   const [companyFilter,   setCompanyFilter]   = useState('')
   const [clientFilterId,  setClientFilterId]  = useState('')
-  const [dateFrom,        setDateFrom]        = useState('')
-  const [dateTo,          setDateTo]          = useState('')
+  const [dateFrom,        setDateFrom]        = useState(() => new Date().toISOString().slice(0, 10))
+  const [dateTo,          setDateTo]          = useState(() => new Date().toISOString().slice(0, 10))
   const [categoryFilter,  setCategoryFilter]  = useState<string[]>([])
   const [mediaTypeFilter, setMediaTypeFilter] = useState('전체')
 
@@ -473,8 +477,8 @@ function NewsRegistrationPage() {
     let result = [...rows]
     if (companyFilter)   result = result.filter(r => r.company_id === companyFilter)
     if (clientFilterId)  result = result.filter(r => r.client_id === Number(clientFilterId))
-    if (dateFrom)                  result = result.filter(r => (r.reg_date ?? '') >= dateFrom)
-    if (dateTo)                    result = result.filter(r => (r.reg_date ?? '') <= dateTo)
+    if (dateFrom)                  result = result.filter(r => (r.created_date ?? '') >= dateFrom)
+    if (dateTo)                    result = result.filter(r => (r.created_date ?? '') <= dateTo)
     if (categoryFilter.length > 0) {
       result = result.filter(r => {
         const cats = (r.categories || '').split(',').map(c => c.trim())
@@ -643,7 +647,7 @@ function NewsRegistrationPage() {
               </select>
             </div>
             <div className='filter-field'>
-              <span className='filter-label'>뉴스등록일</span>
+              <span className='filter-label'>뉴스생성일</span>
               <div className='filter-date-range'>
                 <input
                   type='date'
@@ -714,13 +718,10 @@ function NewsRegistrationPage() {
       </div>
 
       <div className='page-toolbar'>
-        <button className='btn-secondary' onClick={() => setShowFetchModal(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-          <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'>
-            <circle cx='11' cy='11' r='8'/><line x1='21' y1='21' x2='16.65' y2='16.65'/>
-          </svg>
-          뉴스 가져오기
+        <button className='btn-secondary' onClick={() => setShowFetchModal(true)} style={{ backgroundColor: '#e91e8c', borderColor: '#e91e8c', color: '#fff' }}>
+          온라인뉴스생성
         </button>
-        <button className='btn-primary' onClick={() => navigate('/news-registration/new')}>뉴스등록</button>
+        <button className='btn-primary' onClick={() => navigate('/news-registration/new')}>지면뉴스등록</button>
         {checkedIds.size > 0 && user.user_type !== 'manager' && (
           <button className='btn-danger' onClick={handleDeleteSelected}>
             선택 삭제 ({checkedIds.size})
@@ -752,7 +753,7 @@ function NewsRegistrationPage() {
                   <input type='checkbox' checked={isAllChecked} onChange={e => toggleAll(e.target.checked)} />
                 )}
               </th>
-              <th>등록일</th>
+              <th>생성일/등록일</th>
               <th>등록 담당자</th>
               <th>클라이언트</th>
               <th>뉴스매체</th>
@@ -778,19 +779,33 @@ function NewsRegistrationPage() {
                     <input type='checkbox' checked={checkedIds.has(row.id)} onChange={() => toggleCheck(row.id)} />
                   )}
                 </td>
-                <td>{row.reg_date}{row.reg_time ? ` ${row.reg_time}` : ''}</td>
+                <td>
+                  <div style={{ fontSize: '0.85em', color: '#888' }}>생성일: {row.created_date ?? ''}{row.created_time ? ` ${row.created_time}` : ''}</div>
+                  <div style={{ fontSize: '0.85em', color: '#888' }}>등록일: {row.reg_date}{row.reg_time ? ` ${row.reg_time}` : ''}</div>
+                </td>
                 <td>{row.manager}</td>
                 <td>{row.client_name}</td>
                 <td>{row.media_name}</td>
-                <td>{row.categories}</td>
+                <td>
+                  <div>{row.categories}</div>
+                  {row.sentiment && (
+                    <div style={{
+                      fontSize: '0.82em',
+                      marginTop: '0.3rem',
+                      display: 'inline-block',
+                      padding: '0.1rem 0.5rem',
+                      borderRadius: '0.8rem',
+                      background: row.sentiment === '긍정' ? '#e6f4ea' : row.sentiment === '부정' ? '#fde8e8' : '#f3f3f3',
+                      color: row.sentiment === '긍정' ? '#2e7d32' : row.sentiment === '부정' ? '#c62828' : '#888',
+                    }}>{row.sentiment}</div>
+                  )}
+                </td>
                 <td>{row.media_type}</td>
                 <td style={{ textAlign: 'left' }}>
                   {row.link ? (
                     <a className='news-link' href={row.link} target='_blank' rel='noreferrer'>
-                      {row.headline || (row.file_name ? '이미지/PDF' : row.link)}
+                      {row.headline || row.link}
                     </a>
-                  ) : row.file_name ? (
-                    <span>이미지/PDF</span>
                   ) : (
                     <span>{row.headline}</span>
                   )}
@@ -798,7 +813,7 @@ function NewsRegistrationPage() {
                 <td style={{ textAlign: 'center' }}>
                   {row.file_path ? (
                     <img
-                      src={`${window.location.origin}/${row.file_path.replace(/^\//, '')}`}
+                      src={row.file_path.startsWith('/backend/') ? row.file_path : `/backend/uploads/news/${row.file_path.replace(/.*\//, '')}`}
                       alt={row.file_name ?? ''}
                       style={{ maxWidth: '8rem', maxHeight: '5.6rem', objectFit: 'cover', borderRadius: '0.4rem', border: '1px solid #eee', display: 'block', margin: '0 auto' }}
                       onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}

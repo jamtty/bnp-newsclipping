@@ -7,7 +7,6 @@ interface JournalistOption { id: number; name: string }
 interface CategoryOption { id: number; name: string }
 interface CompanyOption { company_id: string; company_name: string }
 
-const MEDIA_TYPE_OPTIONS = ['온라인', '지면', '통신사']
 
 function NewsAddPage() {
   const navigate   = useNavigate()
@@ -33,15 +32,18 @@ function NewsAddPage() {
   const [form, setForm] = useState({
     serial:       '',
     manager:      user.user_type === 'manager' ? (user.name || user.user_id || '') : (user.company_name || user.user_id || ''),
-    reg_date:     '',
-    reg_time:     '',
+    created_date: new Date().toISOString().slice(0, 10),
+    created_time: new Date().toTimeString().slice(0, 5),
+    reg_date:     new Date().toISOString().slice(0, 10),
+    reg_time:     new Date().toTimeString().slice(0, 5),
     client_id:    '',
     client_name:  '',
     media_code:   '',
     media_name:   '',
     journalist:   '',
     categories:   [] as string[],
-    media_type:   '온라인',
+    media_type:   '지면',
+    sentiment:    '중립',
     headline:     '',
     link:         '',
   })
@@ -49,6 +51,9 @@ function NewsAddPage() {
   const [existingFile, setExistingFile] = useState<{ name: string; path: string } | null>(null)
   const [saving,  setSaving]  = useState(false)
   const [error,   setError]   = useState('')
+  const [mediaDirectInput,      setMediaDirectInput]      = useState(false)
+  const [journalistDirectInput, setJournalistDirectInput] = useState(false)
+  const [selectedMediaId,       setSelectedMediaId]       = useState<number | null>(null)
 
   useEffect(() => {
     if (user.user_type === 'super_admin') {
@@ -73,12 +78,17 @@ function NewsAddPage() {
   }, [activeCompanyId])
 
   useEffect(() => {
-    if (!form.media_code) { setJournalists([]); return }
+    if (!form.media_code) { setJournalists([]); setSelectedMediaId(null); return }
     fetch(`/api/media.php?company_id=${encodeURIComponent(activeCompanyId)}&id=${encodeURIComponent(form.media_code)}&by_code=1`)
       .then(r => r.json())
       .then(res => {
-        if (res.success && res.data?.journalists) setJournalists(res.data.journalists)
-        else setJournalists([])
+        if (res.success && res.data?.journalists) {
+          setJournalists(res.data.journalists)
+          setSelectedMediaId(res.data.id ?? null)
+        } else {
+          setJournalists([])
+          setSelectedMediaId(null)
+        }
       })
   }, [form.media_code])
 
@@ -103,6 +113,8 @@ function NewsAddPage() {
         setForm({
           serial:      d.serial      || '',
           manager:     d.manager     || '',
+          created_date: d.created_date || '',
+          created_time: d.created_time || '',
           reg_date:    d.reg_date    || '',
           reg_time:    d.reg_time    || '',
           client_id:   d.client_id   ? String(d.client_id) : '',
@@ -112,6 +124,7 @@ function NewsAddPage() {
           journalist:  d.journalist  || '',
           categories:  d.categories  ? d.categories.split(',') : [],
           media_type:  d.media_type  || '온라인',
+          sentiment:   d.sentiment   || '중립',
           headline:    d.headline    || '',
           link:        d.link        || '',
         })
@@ -131,9 +144,56 @@ function NewsAddPage() {
   }
 
   const handleMediaChange = (code: string) => {
+    if (code === '__direct__') {
+      setMediaDirectInput(true)
+      setForm(prev => ({ ...prev, media_code: '', media_name: '', journalist: '' }))
+      setJournalists([])
+      return
+    }
+    setMediaDirectInput(false)
     const m = mediaList.find(m => m.media_code === code)
     setForm(prev => ({ ...prev, media_code: code, media_name: m?.media_name || '', journalist: '' }))
     setJournalists([])
+  }
+
+  const saveMediaDirect = async () => {
+    const name = form.media_name.trim()
+    if (!name) return
+    const cid = activeCompanyId
+    const res = await fetch('/api/media.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ company_id: cid, media_name: name }),
+    }).then(r => r.json())
+    if (res.success) {
+      const newCode = res.media_code
+      setMediaList(prev => [...prev, { media_code: newCode, media_name: name }])
+      setForm(prev => ({ ...prev, media_code: newCode, media_name: name, journalist: '' }))
+      setMediaDirectInput(false)
+      setJournalists([])
+    }
+  }
+
+  const saveJournalistDirect = async () => {
+    const jName = form.journalist.trim()
+    if (!jName || !form.media_code) return
+    const cid = activeCompanyId
+    const mediaItem = mediaList.find(m => m.media_code === form.media_code)
+    if (!mediaItem || !selectedMediaId) return
+    const existingNames = journalists.map(j => ({ name: j.name }))
+    await fetch('/api/media.php', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: selectedMediaId,
+        company_id: cid,
+        media_name: mediaItem.media_name,
+        journalists: [...existingNames, { name: jName }],
+      }),
+    })
+    setJournalists(prev => [...prev, { id: Date.now(), name: jName }])
+    setForm(prev => ({ ...prev, journalist: jName }))
+    setJournalistDirectInput(false)
   }
 
   const handleClientChange = (id: string) => {
@@ -163,13 +223,23 @@ function NewsAddPage() {
       fd.append('journalist',  form.journalist)
       fd.append('categories',  form.categories.join(','))
       fd.append('media_type',  form.media_type)
+      fd.append('sentiment',   form.sentiment)
       fd.append('headline',    form.headline)
       fd.append('link',        form.link)
       if (file) fd.append('file', file)
       else if (existingFile) { fd.append('file_name_saved', existingFile.name); fd.append('file_path_saved', existingFile.path) }
-      if (isEdit) fd.append('id', String(editData.id))
+      else if (isEdit) fd.append('delete_file', '1')
 
-      const res  = await fetch('/api/news.php', { method: isEdit ? 'PUT' : 'POST', body: fd })
+      if (isEdit) {
+        fd.append('_method', 'PUT')
+        fd.append('id', String(editData.id))
+        fd.append('company_id', activeCompanyId)
+      }
+
+      const url = isEdit
+        ? `/api/news.php?id=${editData.id}&company_id=${encodeURIComponent(activeCompanyId)}`
+        : '/api/news.php'
+      const res  = await fetch(url, { method: 'POST', body: fd })
       const data = await res.json()
       if (data.success) navigate('/news-registration')
       else setError(data.message || '저장 실패')
@@ -248,6 +318,28 @@ function NewsAddPage() {
             </div>
           </div>
 
+          {/* 생성일 */}
+          <div className='nf-row'>
+            <div className='nf-field'>
+              <span className='nf-label'>생성일</span>
+              <div className='nf-date-group'>
+                <input
+                  type='date'
+                  className='nf-input nf-input-date nf-input-readonly'
+                  value={form.created_date}
+                  readOnly
+                />
+                <input
+                  type='text'
+                  className='nf-input nf-input-time nf-input-readonly'
+                  value={form.created_time}
+                  readOnly
+                  placeholder='HH:MM'
+                />
+              </div>
+            </div>
+          </div>
+
           {/* 등록일 */}
           <div className='nf-row'>
             <div className='nf-field'>
@@ -285,18 +377,68 @@ function NewsAddPage() {
           <div className='nf-row'>
             <div className='nf-field nf-field-media'>
               <span className='nf-label'>뉴스매체</span>
-              <select className='nf-select' value={form.media_code} onChange={e => handleMediaChange(e.target.value)}>
-                <option value=''>선택하세요</option>
-                {mediaList.map(m => <option key={m.media_code} value={m.media_code}>{m.media_name}</option>)}
-              </select>
-              <select
-                className='nf-select nf-select-journalist'
-                value={form.journalist}
-                onChange={e => setForm(prev => ({ ...prev, journalist: e.target.value }))}
-              >
-                <option value=''>기자 선택</option>
-                {journalists.map(j => <option key={j.id} value={j.name}>{j.name}</option>)}
-              </select>
+              {!mediaDirectInput ? (
+                <select className='nf-select' value={form.media_code} onChange={e => handleMediaChange(e.target.value)}>
+                  <option value=''>선택하세요</option>
+                  {mediaList.map(m => <option key={m.media_code} value={m.media_code}>{m.media_name}</option>)}
+                  <option value='__direct__'>직접입력</option>
+                </select>
+              ) : (
+                <div style={{ display: 'flex', gap: '6px', flex: 1 }}>
+                  <input
+                    className='nf-input'
+                    placeholder='매체명 입력'
+                    value={form.media_name}
+                    onChange={e => setForm(prev => ({ ...prev, media_name: e.target.value, media_code: '' }))}
+                    autoFocus
+                    onKeyDown={e => { if (e.key === 'Enter') saveMediaDirect() }}
+                  />
+                  <button type='button' className='btn-primary' style={{ whiteSpace: 'nowrap' }} onClick={saveMediaDirect}>저장</button>
+                  <button type='button' className='btn-secondary' style={{ whiteSpace: 'nowrap' }}
+                    onClick={() => { setMediaDirectInput(false); setForm(prev => ({ ...prev, media_code: '', media_name: '', journalist: '' })) }}>
+                    취소
+                  </button>
+                </div>
+              )}
+              {!mediaDirectInput ? (
+                !journalistDirectInput ? (
+                  <select
+                    className='nf-select nf-select-journalist'
+                    value={form.journalist}
+                    onChange={e => {
+                      if (e.target.value === '__direct__') { setJournalistDirectInput(true); setForm(prev => ({ ...prev, journalist: '' })) }
+                      else setForm(prev => ({ ...prev, journalist: e.target.value }))
+                    }}
+                  >
+                    <option value=''>기자 선택</option>
+                    {journalists.map(j => <option key={j.id} value={j.name}>{j.name}</option>)}
+                    <option value='__direct__'>직접입력</option>
+                  </select>
+                ) : (
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    <input
+                      className='nf-input nf-select-journalist'
+                      placeholder='기자명 입력'
+                      value={form.journalist}
+                      onChange={e => setForm(prev => ({ ...prev, journalist: e.target.value }))}
+                      autoFocus
+                      onKeyDown={e => { if (e.key === 'Enter') saveJournalistDirect() }}
+                    />
+                    <button type='button' className='btn-primary' style={{ whiteSpace: 'nowrap' }} onClick={saveJournalistDirect}>저장</button>
+                    <button type='button' className='btn-secondary' style={{ whiteSpace: 'nowrap' }}
+                      onClick={() => { setJournalistDirectInput(false); setForm(prev => ({ ...prev, journalist: '' })) }}>
+                      취소
+                    </button>
+                  </div>
+                )
+              ) : (
+                <input
+                  className='nf-input nf-select-journalist'
+                  placeholder='기자명 입력 (선택사항)'
+                  value={form.journalist}
+                  onChange={e => setForm(prev => ({ ...prev, journalist: e.target.value }))}
+                />
+              )}
             </div>
           </div>
 
@@ -323,13 +465,23 @@ function NewsAddPage() {
             </div>
           </div>
 
+          {/* 기사성향 */}
+          <div className='nf-row'>
+            <div className='nf-field'>
+              <span className='nf-label'>기사성향</span>
+              <select className='nf-select' value={form.sentiment} onChange={e => setForm(prev => ({ ...prev, sentiment: e.target.value }))}>
+                <option value='중립'>중립</option>
+                <option value='긍정'>긍정</option>
+                <option value='부정'>부정</option>
+              </select>
+            </div>
+          </div>
+
           {/* 미디어 Type */}
           <div className='nf-row'>
             <div className='nf-field'>
               <span className='nf-label'>미디어 Type</span>
-              <select className='nf-select' value={form.media_type} onChange={e => setForm(prev => ({ ...prev, media_type: e.target.value }))}>
-                {MEDIA_TYPE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
+              <input className='nf-input nf-input-readonly' value={form.media_type} readOnly />
             </div>
           </div>
 
@@ -378,7 +530,7 @@ function NewsAddPage() {
                     <div style={{ marginTop: '0.8rem' }}>
                       {/\.(jpg|jpeg|png|gif|webp)$/i.test(existingFile.name) && (
                         <img
-                          src={existingFile.path}
+                          src={existingFile.path.startsWith('/backend/') ? existingFile.path : `/backend/uploads/news/${existingFile.path.replace(/.*\//, '')}`}
                           alt={existingFile.name}
                           style={{ display: 'block', width: '450px', maxWidth: '100%', borderRadius: '4px' }}
                           onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}

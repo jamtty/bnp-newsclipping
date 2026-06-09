@@ -76,9 +76,16 @@ if ($method === 'GET') {
     // media_code 기준 기자 목록 조회 (뉴스등록 폼용)
     if ($by_code && $_GET['id'] !== '' && $company_id !== '') {
         $media_code = trim($_GET['id']);
+        $mStmt = $pdo->prepare('SELECT `id`,`media_name` FROM `media` WHERE `media_code` = ? AND `company_id` = ? LIMIT 1');
+        $mStmt->execute([$media_code, $company_id]);
+        $mRow = $mStmt->fetch();
         $jStmt = $pdo->prepare('SELECT `id`,`name` FROM `media_journalists` WHERE `media_code` = ? AND `company_id` = ? ORDER BY `id`');
         $jStmt->execute([$media_code, $company_id]);
-        echo json_encode(['success' => true, 'data' => ['journalists' => $jStmt->fetchAll()]]);
+        echo json_encode(['success' => true, 'data' => [
+            'id' => $mRow ? (int)$mRow['id'] : null,
+            'media_name' => $mRow ? $mRow['media_name'] : '',
+            'journalists' => $jStmt->fetchAll(),
+        ]]);
         exit;
     }
 
