@@ -34,6 +34,7 @@ interface NewsRow {
   file_path: string | null
   journalist: string | null
   sentiment: string | null
+  source_type: string | null
 }
 
 function ReportPage() {
@@ -116,8 +117,8 @@ function ReportPage() {
     let result = [...all]
     if (companyFilter)   result = result.filter(r => r.company_id === companyFilter)
     if (clientFilterId)  result = result.filter(r => r.client_id === Number(clientFilterId))
-    if (dateFrom)        result = result.filter(r => (r.created_date ?? r.reg_date ?? '') >= dateFrom)
-    if (dateTo)          result = result.filter(r => (r.created_date ?? r.reg_date ?? '') <= dateTo)
+    if (dateFrom)        result = result.filter(r => (r.created_date ?? '') >= dateFrom)
+    if (dateTo)          result = result.filter(r => (r.created_date ?? '') <= dateTo)
     if (categoryFilter.length > 0) {
       result = result.filter(r => {
         const cats = (r.categories || '').split(',').map(c => c.trim())
@@ -485,7 +486,13 @@ function ReportPage() {
                   </td>
                   <td>{row.manager}</td>
                   <td>{row.client_name}</td>
-                  <td>{row.media_name}</td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      {row.source_type === 'naver' && <svg width='12' height='12' viewBox='0 0 24 24' fill='#03C75A' style={{ flexShrink: 0 }}><path d='M16.273 12.845 7.376 0H0v24h7.727V11.155L16.624 24H24V0h-7.727z'/></svg>}
+                      {row.source_type === 'daum'  && <svg width='12' height='12' viewBox='0 0 24 24' fill='none' style={{ flexShrink: 0 }}><circle cx='12' cy='12' r='11' fill='#FAE100' stroke='#B8A000' strokeWidth='1.5'/><text x='12' y='16' textAnchor='middle' fill='#3C1E1E' fontSize='12' fontWeight='bold' fontFamily='Arial,sans-serif'>D</text></svg>}
+                      {row.media_name}
+                    </div>
+                  </td>
                   <td>
                     <div>{row.categories}</div>
                     {row.sentiment && (

@@ -38,7 +38,7 @@ interface FetchedItem {
 
 function NaverFetchModal({ onClose, onImport, companies, isSuperAdmin, allClients }: {
   onClose: () => void
-  onImport: (items: FetchedItem[], targetCompanyId: string, opts: { clientId: string; clientName: string; categories: string; mediaCode: string; mediaName: string }) => void
+  onImport: (items: FetchedItem[], targetCompanyId: string, opts: { clientId: string; clientName: string; categories: string; mediaCode: string; mediaName: string; sourceType: string }) => void
   companies: { company_id: string; company_name: string }[]
   isSuperAdmin: boolean
   allClients: ClientOption[]
@@ -103,6 +103,7 @@ function NaverFetchModal({ onClose, onImport, companies, isSuperAdmin, allClient
     }
     if (selCategories.length > 0) parts.push(...selCategories)
     if (query.trim()) parts.push(query.trim())
+    if (selMediaName.trim()) parts.push(selMediaName.trim())
     return parts.join(' ')
   }
 
@@ -335,10 +336,221 @@ function NaverFetchModal({ onClose, onImport, companies, isSuperAdmin, allClient
               categories: selCategories.join(','),
               mediaCode:  selMediaCode,
               mediaName:  selMediaName,
+              sourceType: 'naver',
             })
             onClose()
           }}
         >
+          선택 가져오기 ({checkedItems.length})
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
+// ── 다음 뉴스 가져오기 모달 ──────────────────────────────
+function DaumFetchModal({ onClose, onImport, companies, isSuperAdmin, allClients }: {
+  onClose: () => void
+  onImport: (items: FetchedItem[], targetCompanyId: string, opts: { clientId: string; clientName: string; categories: string; mediaCode: string; mediaName: string; sourceType: string }) => void
+  companies: { company_id: string; company_name: string }[]
+  isSuperAdmin: boolean
+  allClients: ClientOption[]
+}) {
+  const user = JSON.parse(sessionStorage.getItem('user') || '{}')
+  const [query,   setQuery]   = useState('')
+  const [sort,    setSort]    = useState<'accuracy'|'recency'>('recency')
+  const [items,   setItems]   = useState<FetchedItem[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState('')
+  const [page,    setPage]    = useState(1)
+  const [total,   setTotal]   = useState(0)
+  const [isEnd,   setIsEnd]   = useState(false)
+  const [targetCompanyId, setTargetCompanyId] = useState(isSuperAdmin ? '' : (user.company_id || ''))
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const [selClientId,   setSelClientId]   = useState('')
+  const [selCategories, setSelCategories] = useState<string[]>([])
+  const [selMediaCode,  setSelMediaCode]  = useState('')
+  const [selMediaName,  setSelMediaName]  = useState('')
+  const [modalClients,  setModalClients]  = useState<ClientOption[]>([])
+  const [modalCategories, setModalCategories] = useState<string[]>([])
+  const [modalMediaList,  setModalMediaList]  = useState<{ media_code: string; media_name: string }[]>([])
+
+  useEffect(() => { inputRef.current?.focus() }, [])
+
+  useEffect(() => {
+    if (!targetCompanyId) { setModalClients([]); setModalMediaList([]); setSelClientId(''); setSelCategories([]); setSelMediaCode(''); setSelMediaName(''); return }
+    const filtered = allClients.filter(c => c.company_id === targetCompanyId)
+    setModalClients(filtered)
+    setSelClientId(''); setSelCategories([])
+    fetch(`${API}/media.php?company_id=${encodeURIComponent(targetCompanyId)}`)
+      .then(r => r.json())
+      .then(res => { if (res.success) setModalMediaList(res.data) })
+      .catch(() => {})
+  }, [targetCompanyId, allClients])
+
+  useEffect(() => {
+    setSelCategories([])
+    if (!selClientId) { setModalCategories([]); return }
+    const cl = modalClients.find(c => String(c.id) === selClientId)
+    const cid = cl?.company_id || targetCompanyId
+    fetch(`${API}/clients.php?company_id=${encodeURIComponent(cid)}&id=${selClientId}`)
+      .then(r => r.json())
+      .then(res => {
+        if (res.success && res.data?.categories) {
+          setModalCategories(res.data.categories.map((c: { name: string }) => c.name))
+        } else setModalCategories([])
+      })
+      .catch(() => setModalCategories([]))
+  }, [selClientId])
+
+  const buildSearchQuery = () => {
+    const parts: string[] = []
+    if (selClientId) {
+      const cl = modalClients.find(c => String(c.id) === selClientId)
+      if (cl?.company_name) parts.push(cl.company_name)
+    }
+    if (selCategories.length > 0) parts.push(...selCategories)
+    if (query.trim()) parts.push(query.trim())
+    if (selMediaName.trim()) parts.push(selMediaName.trim())
+    return parts.join(' ')
+  }
+
+  const search = (p = 1) => {
+    const combinedQuery = buildSearchQuery()
+    if (!combinedQuery) return
+    setLoading(true)
+    setError('')
+    fetch(`${API}/news-fetch-daum.php?query=${encodeURIComponent(combinedQuery)}&display=20&page=${p}&sort=${sort}`)
+      .then(r => r.json())
+      .then(res => {
+        if (!res.success) { setError(res.message ?? '오류'); return }
+        const fetched: FetchedItem[] = res.items.map((it: FetchedItem) => ({ ...it, _checked: false }))
+        setItems(p === 1 ? fetched : prev => [...prev, ...fetched])
+        setTotal(res.total)
+        setIsEnd(res.is_end)
+        setPage(p + 1)
+      })
+      .catch(() => setError('API 호출 실패'))
+      .finally(() => setLoading(false))
+  }
+
+  const toggle = (i: number) =>
+    setItems(prev => prev.map((it, idx) => idx === i ? { ...it, _checked: !it._checked } : it))
+  const toggleAll = (checked: boolean) =>
+    setItems(prev => prev.map(it => ({ ...it, _checked: checked })))
+  const checkedItems = items.filter(it => it._checked)
+  const canSearch = !!buildSearchQuery()
+
+  return (
+    <Modal title='다음 뉴스 가져오기' onClose={onClose}>
+      <div className='modal-form'>
+        {isSuperAdmin && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem', marginBottom: '0.4rem' }}>
+            <span style={{ fontSize: '1.4rem', color: '#555', whiteSpace: 'nowrap', width: '8rem', flexShrink: 0 }}>담당업체 <span style={{ color: '#e53e3e' }}>*</span></span>
+            <select className={`modal-input${isSuperAdmin && !targetCompanyId ? ' input-error' : ''}`} value={targetCompanyId} onChange={e => setTargetCompanyId(e.target.value)}>
+              <option value=''>선택하세요</option>
+              {companies.map(c => <option key={c.company_id} value={c.company_id}>{c.company_name}</option>)}
+            </select>
+          </div>
+        )}
+        {targetCompanyId && (
+          <div style={{ display: 'flex', gap: '0.8rem', marginBottom: '0.4rem', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <span style={{ fontSize: '1.3rem', color: '#555', whiteSpace: 'nowrap', flexShrink: 0 }}>클라이언트</span>
+              <select className='modal-input' value={selClientId} onChange={e => setSelClientId(e.target.value)} style={{ width: 'auto' }}>
+                <option value=''>선택 안함</option>
+                {modalClients.map(c => <option key={c.id} value={String(c.id)}>{c.company_name}</option>)}
+              </select>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: 1, minWidth: '20rem' }}>
+              <span style={{ fontSize: '1.3rem', color: '#555', whiteSpace: 'nowrap', flexShrink: 0 }}>뉴스매체</span>
+              <select className='modal-input' value={selMediaCode} onChange={e => {
+                const m = modalMediaList.find(m => m.media_code === e.target.value)
+                setSelMediaCode(e.target.value); setSelMediaName(m?.media_name || '')
+              }} style={{ width: 'auto', maxWidth: '28rem' }}>
+                <option value=''>선택 안함</option>
+                {modalMediaList.map(m => <option key={m.media_code} value={m.media_code}>{m.media_name}</option>)}
+              </select>
+            </div>
+          </div>
+        )}
+        {selClientId && modalCategories.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', marginBottom: '0.4rem' }}>
+            <span style={{ fontSize: '1.3rem', color: '#555', whiteSpace: 'nowrap', width: '7rem', flexShrink: 0, paddingTop: '0.4rem' }}>기사분류</span>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem' }}>
+              {modalCategories.map(cat => (
+                <label key={cat} className='filter-checkbox-label'>
+                  <input type='checkbox' className='filter-checkbox' checked={selCategories.includes(cat)}
+                    onChange={() => setSelCategories(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat])} />
+                  {cat}
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: '0.8rem', alignItems: 'center' }}>
+          <input ref={inputRef} className='modal-input' style={{ flex: 1 }}
+            placeholder={selClientId ? '추가 검색어 (선택)' : '검색어 입력 후 Enter'}
+            value={query} onChange={e => { setQuery(e.target.value); setError('') }}
+            onKeyDown={e => e.key === 'Enter' && search(1)} />
+          <select className='modal-input' style={{ flex: 'none', width: '11rem' }} value={sort} onChange={e => setSort(e.target.value as 'accuracy'|'recency')}>
+            <option value='recency'>최신순</option>
+            <option value='accuracy'>정확도순</option>
+          </select>
+          <button className='btn-primary' onClick={() => search(1)} disabled={loading || !canSearch} style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>검색</button>
+        </div>
+        {error && <p className='modal-error' style={{ paddingLeft: 0 }}>{error}</p>}
+        {items.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '1.3rem', color: '#555' }}>
+            <span>총 <strong>{total.toLocaleString()}</strong>건 중 <strong>{items.length}</strong>건 표시</span>
+            <label style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <input type='checkbox' checked={items.length > 0 && items.every(it => it._checked)} onChange={e => toggleAll(e.target.checked)} />
+              전체 선택
+            </label>
+          </div>
+        )}
+        {items.length > 0 && (
+          <div style={{ border: '0.1rem solid #E4E4E4', borderRadius: '0.8rem', maxHeight: '36rem', overflowY: 'auto' }}>
+            {items.map((it, i) => (
+              <div key={i} style={{ display: 'flex', gap: '1.2rem', padding: '1rem 1.6rem', borderBottom: i < items.length - 1 ? '0.1rem solid #F0F0F0' : 'none', background: it._checked ? '#FFF8E1' : 'white', cursor: 'pointer' }} onClick={() => toggle(i)}>
+                <input type='checkbox' checked={!!it._checked} onChange={() => toggle(i)} onClick={e => e.stopPropagation()} style={{ marginTop: '0.3rem', flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 500, fontSize: '1.4rem', color: '#222', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.title}</div>
+                  <div style={{ fontSize: '1.2rem', color: '#888', marginTop: '0.2rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {it.source}&nbsp;·&nbsp;{it.pub_date ? new Date(it.pub_date).toLocaleDateString('ko-KR') : ''}
+                  </div>
+                  {it.description && (
+                    <div style={{ fontSize: '1.2rem', color: '#555', marginTop: '0.3rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{it.description}</div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {items.length > 0 && !isEnd && (
+          <button className='btn-secondary' style={{ width: '100%' }} onClick={() => search(page)} disabled={loading}>
+            {loading ? '로딩 중...' : '더 불러오기'}
+          </button>
+        )}
+        {loading && items.length === 0 && <p style={{ textAlign: 'center', padding: '3rem 0', color: '#888', fontSize: '1.4rem' }}>검색 중...</p>}
+        {!loading && items.length === 0 && query && <p style={{ textAlign: 'center', padding: '2rem 0', color: '#aaa', fontSize: '1.4rem' }}>검색 결과가 없습니다.</p>}
+      </div>
+      <div className='modal-footer' style={{ gap: '1rem' }}>
+        <button className='btn-secondary' onClick={onClose}>닫기</button>
+        <button className='btn-primary' disabled={checkedItems.length === 0 || (isSuperAdmin && !targetCompanyId)}
+          onClick={() => {
+            const cl = modalClients.find(c => String(c.id) === selClientId)
+            onImport(checkedItems, targetCompanyId, {
+              clientId:   selClientId,
+              clientName: cl?.company_name || '',
+              categories: selCategories.join(','),
+              mediaCode:  selMediaCode,
+              mediaName:  selMediaName,
+              sourceType: 'daum',
+            })
+            onClose()
+          }}>
           선택 가져오기 ({checkedItems.length})
         </button>
       </div>
@@ -368,6 +580,7 @@ interface NewsRow {
   created_time: string | null
   journalist: string | null
   sentiment: string | null
+  source_type: string | null
 }
 
 interface ClientOption {
@@ -400,8 +613,10 @@ function NewsRegistrationPage() {
   const toggleAll = (checked: boolean) =>
     setCheckedIds(checked ? new Set(pageData.map(r => r.id)) : new Set())
 
-  // 네이버 뉴스 가져오기 모달
-  const [showFetchModal, setShowFetchModal] = useState(false)
+  // 뉴스 가져오기 모달
+  const [showNaverModal, setShowNaverModal] = useState(false)
+  const [showDaumModal,  setShowDaumModal]  = useState(false)
+  const [isImporting,    setIsImporting]    = useState(false)
 
   // 필터 상태
   const [companyFilter,   setCompanyFilter]   = useState('')
@@ -526,7 +741,10 @@ function NewsRegistrationPage() {
   }
 
   // 네이버에서 선택한 뉴스 일괄 등록
-  const handleImport = async (items: FetchedItem[], targetCompanyId: string, opts: { clientId: string; clientName: string; categories: string; mediaCode: string; mediaName: string }) => {
+  const handleImport = async (items: FetchedItem[], targetCompanyId: string, opts: { clientId: string; clientName: string; categories: string; mediaCode: string; mediaName: string; sourceType: string }) => {
+    setShowNaverModal(false)
+    setShowDaumModal(false)
+    setIsImporting(true)
     const cid = user.user_type === 'super_admin' ? targetCompanyId : companyId
     const managerLabel = user.user_type === 'super_admin'
       ? (companies.find(c => c.company_id === targetCompanyId)?.company_name || targetCompanyId)
@@ -546,6 +764,7 @@ function NewsRegistrationPage() {
       fd.append('headline',   item.title)
       fd.append('link',       item.link)
       fd.append('media_type', '온라인')
+      fd.append('source_type', opts.sourceType)
       if (opts.clientId)   { fd.append('client_id', opts.clientId); fd.append('client_name', opts.clientName) }
       if (opts.categories) fd.append('categories', opts.categories)
 
@@ -554,7 +773,6 @@ function NewsRegistrationPage() {
       if (item.link) {
         try {
           const imgRes = await fetch(`${API}/news-image.php?url=${encodeURIComponent(item.link)}`).then(r => r.json())
-          // 이미지 성공 여부와 관계없이 media_name, journalist는 항상 적용
           if (imgRes.success && imgRes.file_name) {
             fd.append('file_name_saved', imgRes.file_name)
             fd.append('file_path_saved', imgRes.file_path)
@@ -565,12 +783,14 @@ function NewsRegistrationPage() {
           // 실패 시 무시
         }
       }
-      // 최종 매체명: og:site_name > 선택한 매체명 순서, 영문 호스트명은 사용 안 함
+      // media_name이 여전히 비어있으면 다음 크롤링 source 필드 fallback
+      if (!resolvedMediaName && item.source) resolvedMediaName = item.source
       if (resolvedMediaName) fd.append('media_name', resolvedMediaName)
 
       const res = await fetch(`${API}/news.php`, { method: 'POST', body: fd }).then(r => r.json())
       if (res.success) successCount++
     }
+    setIsImporting(false)
     alert(`${successCount}건 등록되었습니다.`)
     loadNews()
   }
@@ -597,6 +817,12 @@ function NewsRegistrationPage() {
 
   return (
     <div className='page'>
+      {isImporting && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.18)', zIndex: 9999, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '1.6rem' }}>
+          <div style={{ width: '5rem', height: '5rem', border: '5px solid #e2e8f0', borderTop: '5px solid #4A90D9', borderRadius: '50%', animation: 'nws-spin 0.8s linear infinite' }} />
+          <span style={{ color: '#fff', fontSize: '1.5rem', fontWeight: 500, textShadow: '0 1px 4px rgba(0,0,0,0.4)' }}>뉴스를 등록하는 중입니다...</span>
+        </div>
+      )}
       <div className='page-header'>
         <h2 className='page-title'>뉴스관리</h2>
         <nav className='breadcrumb'>
@@ -647,7 +873,7 @@ function NewsRegistrationPage() {
               </select>
             </div>
             <div className='filter-field'>
-              <span className='filter-label'>뉴스생성일</span>
+              <span className='filter-label'>기사생성일</span>
               <div className='filter-date-range'>
                 <input
                   type='date'
@@ -718,8 +944,16 @@ function NewsRegistrationPage() {
       </div>
 
       <div className='page-toolbar'>
-        <button className='btn-secondary' onClick={() => setShowFetchModal(true)} style={{ backgroundColor: '#e91e8c', borderColor: '#e91e8c', color: '#fff' }}>
-          온라인뉴스생성
+        <button className='btn-secondary' onClick={() => setShowNaverModal(true)} style={{ backgroundColor: '#03C75A', borderColor: '#03C75A', color: '#fff', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <svg width='16' height='16' viewBox='0 0 24 24' fill='currentColor'><path d='M16.273 12.845 7.376 0H0v24h7.727V11.155L16.624 24H24V0h-7.727z'/></svg>
+          네이버온라인뉴스생성
+        </button>
+        <button className='btn-secondary' onClick={() => setShowDaumModal(true)} style={{ backgroundColor: '#FAE100', borderColor: '#E6CE00', color: '#3C1E1E', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <svg width='16' height='16' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'>
+            <circle cx='12' cy='12' r='11' fill='#FAE100' stroke='#B8A000' strokeWidth='1.5'/>
+            <text x='12' y='17' textAnchor='middle' fill='#3C1E1E' fontSize='13' fontWeight='bold' fontFamily='Arial,sans-serif'>D</text>
+          </svg>
+          다음온라인뉴스생성
         </button>
         <button className='btn-primary' onClick={() => navigate('/news-registration/new')}>지면뉴스등록</button>
         {checkedIds.size > 0 && user.user_type !== 'manager' && (
@@ -729,9 +963,18 @@ function NewsRegistrationPage() {
         )}
       </div>
 
-      {showFetchModal && (
+      {showNaverModal && (
         <NaverFetchModal
-          onClose={() => setShowFetchModal(false)}
+          onClose={() => setShowNaverModal(false)}
+          onImport={handleImport}
+          companies={companies}
+          isSuperAdmin={user.user_type === 'super_admin'}
+          allClients={clients}
+        />
+      )}
+      {showDaumModal && (
+        <DaumFetchModal
+          onClose={() => setShowDaumModal(false)}
           onImport={handleImport}
           companies={companies}
           isSuperAdmin={user.user_type === 'super_admin'}
@@ -785,7 +1028,17 @@ function NewsRegistrationPage() {
                 </td>
                 <td>{row.manager}</td>
                 <td>{row.client_name}</td>
-                <td>{row.media_name}</td>
+                <td>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                    {row.source_type === 'naver' && (
+                      <svg width='13' height='13' viewBox='0 0 24 24' fill='#03C75A' style={{ flexShrink: 0 }}><path d='M16.273 12.845 7.376 0H0v24h7.727V11.155L16.624 24H24V0h-7.727z'/></svg>
+                    )}
+                    {row.source_type === 'daum' && (
+                      <svg width='13' height='13' viewBox='0 0 24 24' fill='none' style={{ flexShrink: 0 }}><circle cx='12' cy='12' r='11' fill='#FAE100' stroke='#B8A000' strokeWidth='1.5'/><text x='12' y='16' textAnchor='middle' fill='#3C1E1E' fontSize='12' fontWeight='bold' fontFamily='Arial,sans-serif'>D</text></svg>
+                    )}
+                    <span>{row.media_name}</span>
+                  </div>
+                </td>
                 <td>
                   <div>{row.categories}</div>
                   {row.sentiment && (

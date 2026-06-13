@@ -79,6 +79,9 @@ try {
 try {
     $pdo->exec("ALTER TABLE `news` ADD COLUMN `sentiment` VARCHAR(10) DEFAULT '중립' COMMENT '기사성향(긍정/부정/중립)' AFTER `created_time`");
 } catch (Exception $e) { /* 이미 있으면 무시 */ }
+try {
+    $pdo->exec("ALTER TABLE `news` ADD COLUMN `source_type` VARCHAR(10) DEFAULT NULL COMMENT '뉴스출처(naver/daum)' AFTER `sentiment`");
+} catch (Exception $e) { /* 이미 있으면 무시 */ }
 
 // 키워드 기반 기사 성향 판별 함수
 function detectSentiment(string $text, string $company_id, $pdo): string {
@@ -247,8 +250,8 @@ if ($method === 'POST') {
             (`company_id`,`serial`,`manager`,`manager_user_id`,`reg_date`,`reg_time`,
              `client_id`,`client_name`,`media_code`,`media_name`,`journalist`,
              `categories`,`media_type`,`headline`,`link`,`file_name`,`file_path`,
-             `created_date`,`created_time`,`sentiment`)
-        VALUES (?,?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?,?, ?,?,?)
+             `created_date`,`created_time`,`sentiment`,`source_type`)
+        VALUES (?,?,?,?,?,?, ?,?,?,?,?, ?,?,?,?,?,?, ?,?,?,?)
     ');
     $stmt->execute([
         $company_id,
@@ -271,6 +274,7 @@ if ($method === 'POST') {
         $now_date,
         $now_time,
         $sentiment,
+        trim($_POST['source_type'] ?? '') ?: null,
     ]);
 
     echo json_encode(['success' => true, 'id' => (int)$pdo->lastInsertId(), 'serial' => $serial]);

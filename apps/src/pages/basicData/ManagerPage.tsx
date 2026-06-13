@@ -21,8 +21,9 @@ function ManagerPage() {
   const [totalPages, setTotalPages]   = useState(1)
   const [showModal, setShowModal]     = useState(false)
   const [editingRow, setEditingRow]   = useState<RowData | null>(null)
+  const [checkedIds, setCheckedIds]   = useState<Set<number>>(new Set())
 
-  const PAGE_SIZE = 10
+  const PAGE_SIZE = 50
 
   const fetchList = () => {
     let url = '/api/managers.php'
@@ -53,6 +54,25 @@ function ManagerPage() {
   }, [])
 
   const pagedData = data.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+  const isAllChecked = pagedData.length > 0 && pagedData.every(r => checkedIds.has(r.id))
+  const toggleCheck = (id: number) => setCheckedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+  const toggleAll = (checked: boolean) => setCheckedIds(checked ? new Set(pagedData.map(r => r.id)) : new Set())
+  const handleDeleteSelected = async () => {
+    if (checkedIds.size === 0) return
+    if (!window.confirm(`선택한 ${checkedIds.size}건을 삭제하시겠습니까?`)) return
+    for (const id of Array.from(checkedIds)) {
+      let url = `/api/managers.php?id=${id}`
+      const row = data.find(d => d.id === id)
+      if (user.user_type === 'super_admin') {
+        if (row && row.company_id) url += `&company_id=${encodeURIComponent(row.company_id)}`
+      } else {
+        url += `&company_id=${encodeURIComponent(user.company_id)}`
+      }
+      await fetch(url, { method: 'DELETE' })
+    }
+    setCheckedIds(new Set())
+    fetchList()
+  }
 
   const openAdd  = () => { setEditingRow(null); setShowModal(true) }
   const openEdit = (row: RowData) => { setEditingRow(row); setShowModal(true) }
@@ -104,6 +124,9 @@ function ManagerPage() {
             {companies.map(c => <option key={c.company_id} value={c.company_id}>{c.company_name} ({c.company_id})</option>)}
           </select>
         )}
+        {checkedIds.size > 0 && (
+          <button className='btn-danger' onClick={handleDeleteSelected} style={{ marginRight: '8px' }}>선택삭제 ({checkedIds.size})</button>
+        )}
         <button className='btn-primary' onClick={openAdd}>신규</button>
       </div>
 
@@ -116,9 +139,11 @@ function ManagerPage() {
       )}
 
       <div className='content-card'>
+        <div className='table-count'>총 <strong>{data.length}</strong>건</div>
         <table className='data-table'>
           <thead>
             <tr>
+              <th style={{ width: '3rem', textAlign: 'center' }}><input type='checkbox' checked={isAllChecked} onChange={e => toggleAll(e.target.checked)} /></th>
               {user.user_type === 'super_admin' && <th className='col-admin-company'>담당업체</th>}
               <th>담당자 ID</th>
               <th>한글이름</th>
@@ -130,9 +155,10 @@ function ManagerPage() {
           </thead>
           <tbody>
             {pagedData.length === 0 ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center', color: '#aaa' }}>등록된 담당자가 없습니다</td></tr>
+              <tr><td colSpan={user.user_type === 'super_admin' ? 8 : 7} style={{ textAlign: 'center', color: '#aaa' }}>등록된 담당자가 없습니다</td></tr>
             ) : pagedData.map(row => (
               <tr key={row.id}>
+                <td style={{ textAlign: 'center' }}><input type='checkbox' checked={checkedIds.has(row.id)} onChange={() => toggleCheck(row.id)} /></td>
                 {user.user_type === 'super_admin' && <td className='col-admin-company'>{row.company_name ? `${row.company_name} (${row.company_id})` : row.company_id}</td>}
                 <td>{row.manager_id}</td>
                 <td>{row.name}</td>

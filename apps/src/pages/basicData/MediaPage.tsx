@@ -11,7 +11,7 @@ interface MediaRow {
   admin_company_name?: string
 }
 
-const PAGE_SIZE = 10
+const PAGE_SIZE = 50
 
 function MediaPage() {
   const navigate  = useNavigate()
@@ -21,6 +21,7 @@ function MediaPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [companies, setCompanies]     = useState<{ company_id: string; company_name: string }[]>([])
   const [selectedCompany, setSelectedCompany] = useState<string>('all')
+  const [checkedIds, setCheckedIds]   = useState<Set<number>>(new Set())
 
   const fetchList = () => {
     let url = '/api/media.php'
@@ -43,6 +44,25 @@ function MediaPage() {
 
   const totalPages = Math.max(1, Math.ceil(data.length / PAGE_SIZE))
   const pagedData  = data.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+  const isAllChecked = pagedData.length > 0 && pagedData.every(r => checkedIds.has(r.id))
+  const toggleCheck = (id: number) => setCheckedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+  const toggleAll = (checked: boolean) => setCheckedIds(checked ? new Set(pagedData.map(r => r.id)) : new Set())
+  const handleDeleteSelected = async () => {
+    if (checkedIds.size === 0) return
+    if (!window.confirm(`선택한 ${checkedIds.size}건을 삭제하시겠습니까?`)) return
+    for (const id of Array.from(checkedIds)) {
+      let url = `/api/media.php?id=${id}`
+      const row = data.find(d => d.id === id)
+      if (user.user_type === 'super_admin') {
+        if (row && row.company_id) url += `&company_id=${encodeURIComponent(row.company_id)}`
+      } else {
+        url += `&company_id=${encodeURIComponent(user.company_id)}`
+      }
+      await fetch(url, { method: 'DELETE' })
+    }
+    setCheckedIds(new Set())
+    fetchList()
+  }
 
   const handleEdit = (row: MediaRow) => {
     navigate('/basic-data/media/new', { state: { id: row.id, company_id: row.company_id } })
@@ -95,13 +115,18 @@ function MediaPage() {
             {companies.map(c => <option key={c.company_id} value={c.company_id}>{c.company_name} ({c.company_id})</option>)}
           </select>
         )}
+        {checkedIds.size > 0 && (
+          <button className='btn-danger' onClick={handleDeleteSelected} style={{ marginRight: '8px' }}>선택삭제 ({checkedIds.size})</button>
+        )}
         <button className='btn-primary' onClick={() => navigate('/basic-data/media/new')}>신규</button>
       </div>
 
       <div className='content-card'>
+        <div className='table-count'>총 <strong>{data.length}</strong>건</div>
         <table className='data-table'>
           <thead>
             <tr>
+              <th style={{ width: '3rem', textAlign: 'center' }}><input type='checkbox' checked={isAllChecked} onChange={e => toggleAll(e.target.checked)} /></th>
               {user.user_type === 'super_admin' && <th className='col-admin-company'>담당업체</th>}
               <th>뉴스매체 ID</th>
               <th>매체명</th>
@@ -112,9 +137,10 @@ function MediaPage() {
           </thead>
           <tbody>
             {pagedData.length === 0 ? (
-              <tr><td colSpan={user.user_type === 'super_admin' ? 6 : 5} style={{ textAlign: 'center', color: '#aaa' }}>등록된 매체가 없습니다</td></tr>
+              <tr><td colSpan={user.user_type === 'super_admin' ? 7 : 6} style={{ textAlign: 'center', color: '#aaa' }}>등록된 매체가 없습니다</td></tr>
             ) : pagedData.map(row => (
               <tr key={row.id}>
+                <td style={{ textAlign: 'center' }}><input type='checkbox' checked={checkedIds.has(row.id)} onChange={() => toggleCheck(row.id)} /></td>
                 {user.user_type === 'super_admin' && <td className='col-admin-company'>{row.admin_company_name ? `${row.admin_company_name} (${row.company_id})` : row.company_id}</td>}
                 <td>{row.media_code}</td>
                 <td>{row.media_name}</td>

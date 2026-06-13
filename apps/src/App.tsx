@@ -18,8 +18,14 @@ import CompanyInfoPage from './pages/basicData/CompanyInfoPage'
 import './assets/css/style.css'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const user = sessionStorage.getItem('user')
-  if (!user) return <Navigate to='/' replace />
+  try {
+    const raw = sessionStorage.getItem('user')
+    if (!raw) return <Navigate to='/' replace />
+    const user = JSON.parse(raw)
+    if (!user?.user_id) return <Navigate to='/' replace />
+  } catch {
+    return <Navigate to='/' replace />
+  }
   return <>{children}</>
 }
 

@@ -20,13 +20,33 @@ $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
 if (in_array($origin, $allowed, true)) {
     header('Access-Control-Allow-Origin: ' . $origin);
 }
-header('Access-Control-Allow-Methods: POST, OPTIONS');
+header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type');
 header('Access-Control-Allow-Credentials: true');
 
 // preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
+    exit;
+}
+
+// ── GET ?validate=1: 세션 유효성 검증 ──────────────────
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['validate'])) {
+    $company_id = trim($_GET['company_id'] ?? '');
+    $user_id    = trim($_GET['user_id']    ?? '');
+    if ($company_id === '' || $user_id === '') {
+        echo json_encode(['success' => false]); exit;
+    }
+    require_once __DIR__ . '/../config.php';
+    // users 테이블 확인
+    $s = $pdo->prepare("SELECT 1 FROM `users` WHERE `company_id`=? AND `user_id`=? LIMIT 1");
+    $s->execute([$company_id, $user_id]);
+    if ($s->fetch()) { echo json_encode(['success' => true]); exit; }
+    // managers 테이블 확인
+    $s2 = $pdo->prepare("SELECT 1 FROM `managers` WHERE `company_id`=? AND `manager_id`=? LIMIT 1");
+    $s2->execute([$company_id, $user_id]);
+    if ($s2->fetch()) { echo json_encode(['success' => true]); exit; }
+    echo json_encode(['success' => false]);
     exit;
 }
 

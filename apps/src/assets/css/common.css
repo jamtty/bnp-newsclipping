@@ -1,5 +1,9 @@
 @charset "UTF-8";
 
+@keyframes nws-spin {
+  to { transform: rotate(360deg); }
+}
+
 @font-face {
   font-family: 'Pretendard';
   font-weight: 900;

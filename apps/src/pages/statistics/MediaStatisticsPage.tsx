@@ -30,6 +30,7 @@ interface NewsRow {
   file_path: string | null
   journalist: string | null
   sentiment: string | null
+  source_type: string | null
 }
 
 interface MediaStat {
@@ -112,8 +113,8 @@ function MediaStatisticsPage() {
           let rows: NewsRow[] = res.data
           if (companyFilter)  rows = rows.filter(r => r.company_id === companyFilter)
           if (clientFilterId) rows = rows.filter(r => r.client_id === Number(clientFilterId))
-          if (dateFrom)       rows = rows.filter(r => (r.created_date ?? r.reg_date ?? '') >= dateFrom)
-          if (dateTo)         rows = rows.filter(r => (r.created_date ?? r.reg_date ?? '') <= dateTo)
+          if (dateFrom)       rows = rows.filter(r => (r.created_date ?? '') >= dateFrom)
+          if (dateTo)         rows = rows.filter(r => (r.created_date ?? '') <= dateTo)
           if (categoryFilter.length > 0) {
             rows = rows.filter(r => {
               const cats = (r.categories || '').split(',').map(c => c.trim())
@@ -448,7 +449,13 @@ function MediaStatisticsPage() {
                     <div style={{ fontSize: '0.85em', color: '#888' }}>등록일: {row.reg_date}{row.reg_time ? ` ${row.reg_time}` : ''}</div>
                   </td>
                   <td>{row.client_name}</td>
-                  <td>{row.media_name}</td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      {row.source_type === 'naver' && <svg width='12' height='12' viewBox='0 0 24 24' fill='#03C75A' style={{ flexShrink: 0 }}><path d='M16.273 12.845 7.376 0H0v24h7.727V11.155L16.624 24H24V0h-7.727z'/></svg>}
+                      {row.source_type === 'daum'  && <svg width='12' height='12' viewBox='0 0 24 24' fill='none' style={{ flexShrink: 0 }}><circle cx='12' cy='12' r='11' fill='#FAE100' stroke='#B8A000' strokeWidth='1.5'/><text x='12' y='16' textAnchor='middle' fill='#3C1E1E' fontSize='12' fontWeight='bold' fontFamily='Arial,sans-serif'>D</text></svg>}
+                      {row.media_name}
+                    </div>
+                  </td>
                   <td>
                     <div>{row.categories}</div>
                     {row.sentiment && (

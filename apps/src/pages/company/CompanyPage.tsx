@@ -11,13 +11,14 @@ interface CompanyRow {
   manager_email: string
 }
 
-const PAGE_SIZE = 10
+const PAGE_SIZE = 50
 
 function CompanyPage() {
   const navigate = useNavigate()
 
   const [data, setData]               = useState<CompanyRow[]>([])
   const [currentPage, setCurrentPage] = useState(1)
+  const [checkedIds, setCheckedIds]   = useState<Set<string>>(new Set())
 
   const fetchList = () => {
     fetch('/api/companies.php')
@@ -29,6 +30,18 @@ function CompanyPage() {
 
   const totalPages = Math.max(1, Math.ceil(data.length / PAGE_SIZE))
   const pagedData  = data.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+  const isAllChecked = pagedData.length > 0 && pagedData.every(r => checkedIds.has(r.company_id))
+  const toggleCheck = (id: string) => setCheckedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+  const toggleAll = (checked: boolean) => setCheckedIds(checked ? new Set(pagedData.map(r => r.company_id)) : new Set())
+  const handleDeleteSelected = async () => {
+    if (checkedIds.size === 0) return
+    if (!window.confirm(`선택한 ${checkedIds.size}건을 삭제하시겠습니까?\n모든 관련 데이터가 함기 삭제됩니다.`)) return
+    for (const id of Array.from(checkedIds)) {
+      await fetch(`/api/companies.php?id=${id}`, { method: 'DELETE' })
+    }
+    setCheckedIds(new Set())
+    fetchList()
+  }
 
   const handleEdit = (row: CompanyRow) => {
     navigate('/company/edit', { state: { company_id: row.company_id } })
@@ -59,13 +72,18 @@ function CompanyPage() {
       </div>
 
       <div className='page-toolbar'>
+        {checkedIds.size > 0 && (
+          <button className='btn-danger' onClick={handleDeleteSelected} style={{ marginRight: '8px' }}>선택삭제 ({checkedIds.size})</button>
+        )}
         <button className='btn-primary' onClick={() => navigate('/company/new')}>신규 업체 등록</button>
       </div>
 
       <div className='content-card'>
+        <div className='table-count'>총 <strong>{data.length}</strong>건</div>
         <table className='data-table'>
           <thead>
             <tr>
+              <th style={{ width: '3rem', textAlign: 'center' }}><input type='checkbox' checked={isAllChecked} onChange={e => toggleAll(e.target.checked)} /></th>
               <th>No.</th>
               <th>회사 ID</th>
               <th>상호</th>
@@ -79,12 +97,13 @@ function CompanyPage() {
           <tbody>
             {pagedData.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', color: '#aaa' }}>
+                <td colSpan={9} style={{ textAlign: 'center', color: '#aaa' }}>
                   등록된 업체가 없습니다
                 </td>
               </tr>
             ) : pagedData.map((row, idx) => (
               <tr key={row.company_id}>
+                <td style={{ textAlign: 'center' }}><input type='checkbox' checked={checkedIds.has(row.company_id)} onChange={() => toggleCheck(row.company_id)} /></td>
                 <td>{(currentPage - 1) * PAGE_SIZE + idx + 1}</td>
                 <td>{row.company_id}</td>
                 <td>{row.company_name}</td>

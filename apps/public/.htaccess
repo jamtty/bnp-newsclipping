@@ -1,6 +1,9 @@
 Options -MultiViews
 RewriteEngine On
 
+# phpMyAdmin은 PHP로 직접 서빙 (React 라우터 제외)
+RewriteRule ^phpMyAdmin(/.*)?$ - [L]
+
 # /api/* → /backend/api/* (운영서버 경로 매핑)
 RewriteRule ^api/(.*)$ /backend/api/$1 [L,QSA]
 

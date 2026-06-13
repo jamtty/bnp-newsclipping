@@ -11,10 +11,16 @@
 define('NAVER_CLIENT_ID',     'pcmhlVLXhGx184_5fa5y');
 define('NAVER_CLIENT_SECRET', 'mjr3yAwAY4');
 
+// =============================================
+// 카카오 REST API 키 (다음 뉴스 검색)
+// https://developers.kakao.com 에서 발급
+// =============================================
+define('KAKAO_REST_API_KEY', '612c306c9cf0f3ad1ca368f3c9405fa3');
+
 define('DB_HOST',    'localhost');
 define('DB_NAME',    'newsclipping');   // cafe24 DB 이름으로 수정
 define('DB_USER',    'newsclipping');   // cafe24 DB 계정으로 수정
-define('DB_PASS',    'wkaxnl001!');               // cafe24 DB 비밀번호로 수정
+define('DB_PASS',    'wkaxnl001!');     // cafe24 DB 비밀번호로 수정
 define('DB_CHARSET', 'utf8mb4');
 
 try {
